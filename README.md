@@ -1,6 +1,6 @@
 # Tej IT Solutions - Client Billing & Management System
 
-A comprehensive, production-ready billing and invoice management system built with Python Flask for Tej IT Solutions India Pvt. Ltd.
+A comprehensive, production-ready billing and invoice management system built with Python Flask and React for Tej IT Solutions India Pvt. Ltd.
 
 ## 🌟 Features
 
@@ -56,7 +56,7 @@ A comprehensive, production-ready billing and invoice management system built wi
 ### Tech Stack
 - **Backend**: Python 3.11, Flask, SQLAlchemy
 - **Database**: MySQL 8.0
-- **Frontend**: Bootstrap 5, jQuery, HTML5/CSS3
+- **Frontend**: React 18, TypeScript, Tailwind CSS, Bootstrap 5
 - **PDF Generation**: ReportLab
 - **Authentication**: Flask-JWT-Extended
 - **Caching**: Redis
@@ -84,6 +84,7 @@ tej-billing/
 
 ### Prerequisites
 - Python 3.11+
+- Node.js 18+
 - MySQL 8.0+
 - Redis 6.0+
 - Nginx (for production)
@@ -126,12 +127,26 @@ tej-billing/
    python database_setup.py
    ```
 
-7. **Run development server**
+7. **Install frontend dependencies**
+   ```bash
+   npm install
+   ```
+
+8. **Run development servers**
+   
+   Backend (Flask):
    ```bash
    python app.py
    ```
+   
+   Frontend (React - in a separate terminal):
+   ```bash
+   npm run dev
+   ```
 
-Visit `http://localhost:5000` and login with:
+Visit `http://localhost:5000` for the main Flask application or `http://localhost:5173` for the React development interface.
+
+Login credentials:
 - **Admin**: admin / admin123
 - **Manager**: manager1 / manager123
 - **Auditor**: auditor1 / auditor123
@@ -151,10 +166,27 @@ docker-compose up -d
 
 #### Option 3: Manual Deployment
 1. Follow development setup steps 1-6 on production server
-2. Configure Gunicorn and Nginx
-3. Set up systemd service
-4. Configure SSL certificates
-5. Set up log rotation and backups
+2. Build frontend: `npm run build`
+3. Configure Gunicorn and Nginx
+4. Set up systemd service
+5. Configure SSL certificates
+6. Set up log rotation and backups
+
+## 🔧 Development
+
+### Frontend Development
+The React frontend is located in the `src/` directory and uses:
+- **React 18** with TypeScript
+- **Tailwind CSS** for styling
+- **Vite** for build tooling
+- **Lucide React** for icons
+
+### Backend Development
+The Flask backend is in the `app/` directory with:
+- **Flask** web framework
+- **SQLAlchemy** ORM
+- **JWT** authentication
+- **Bootstrap 5** for admin templates
 
 ## 📖 Usage Guide
 
