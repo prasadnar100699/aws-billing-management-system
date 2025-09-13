@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useApi } from '@/lib/hooks/useApi';
 import { analyticsApi } from '@/lib/api';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
@@ -40,11 +39,7 @@ export default function Dashboard() {
   const { user, hasPermission } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
-
-  // API hooks for different roles
-  const { execute: fetchSuperAdminAnalytics } = useApi(analyticsApi.getSuperAdminAnalytics);
-  const { execute: fetchClientManagerAnalytics } = useApi(analyticsApi.getClientManagerAnalytics);
-  const { execute: fetchAuditorAnalytics } = useApi(analyticsApi.getAuditorAnalytics);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
@@ -53,26 +48,30 @@ export default function Dashboard() {
   }, [user]);
 
   const loadAnalyticsData = async () => {
+    setLoading(true);
     try {
       let data;
       
       switch (user?.role_name) {
         case 'Super Admin':
-          data = await fetchSuperAdminAnalytics();
+          data = await analyticsApi.getSuperAdminAnalytics();
           break;
         case 'Client Manager':
-          data = await fetchClientManagerAnalytics();
+          data = await analyticsApi.getClientManagerAnalytics();
           break;
         case 'Auditor':
-          data = await fetchAuditorAnalytics();
+          data = await analyticsApi.getAuditorAnalytics();
           break;
         default:
+          setLoading(false);
           return;
       }
       
       setAnalyticsData(data);
     } catch (error) {
       console.error('Failed to load analytics data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,13 +109,13 @@ export default function Dashboard() {
 
   // Render different dashboard based on role
   const renderDashboardContent = () => {
-    if (!analyticsData) {
+    if (loading || !analyticsData) {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardContent className="p-6">
-                <div className="h-20 bg-gray-200 rounded"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
               </CardContent>
             </Card>
           ))}

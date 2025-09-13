@@ -1,42 +1,4 @@
-import axios from 'axios';
-
-// API Configuration
-const API_BASE_URL = 'http://localhost:5002/api';
-
-// Create axios instance with default config
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor to add user email header
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const userData = localStorage.getItem('user_data');
-    if (userData) {
-      const user = JSON.parse(userData);
-      config.headers['X-User-Email'] = user.email;
-    }
-  }
-  return config;
-});
-
-// Response interceptor for error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('user_data');
-        window.location.href = '/';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Simple API client without JWT dependencies
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -58,6 +20,18 @@ export interface PaginatedResponse<T> {
   per_page: number;
 }
 
+// Helper function to get user email for API calls
+const getUserEmail = () => {
+  if (typeof window !== 'undefined') {
+    const userData = localStorage.getItem('user_data');
+    if (userData) {
+      const user = JSON.parse(userData);
+      return user.email;
+    }
+  }
+  return '';
+};
+
 // Authentication API
 export const authApi = {
   login: (credentials: { email: string; password: string }) =>
@@ -68,12 +42,9 @@ export const authApi = {
     }),
   
   logout: () => {
-    const userData = localStorage.getItem('user_data');
-    const userEmail = userData ? JSON.parse(userData).email : '';
-    
     return fetch('/api/auth/logout', { 
       method: 'POST',
-      headers: { 'X-User-Email': userEmail }
+      headers: { 'X-User-Email': getUserEmail() }
     });
   },
   
@@ -83,85 +54,213 @@ export const authApi = {
   }
 };
 
-// Users API
-export const usersApi = {
-  list: (params?: { page?: number; limit?: number; search?: string; role_id?: number; status?: string }) =>
-    api.get<PaginatedResponse<any>>('/users', { params }),
-  
-  create: (userData: any) => api.post<ApiResponse<{ user: any }>>('/users', userData),
-  
-  get: (userId: number) => api.get<ApiResponse<{ user: any; assigned_clients: any[] }>>(`/users/${userId}`),
-  
-  update: (userId: number, userData: any) => api.put<ApiResponse<{ user: any }>>(`/users/${userId}`, userData),
-  
-  delete: (userId: number) => api.delete<ApiResponse>(`/users/${userId}`),
-  
-  // Roles
-  listRoles: () => api.get<ApiResponse<{ roles: any[] }>>('/users/roles'),
-  
-  createRole: (roleData: any) => api.post<ApiResponse<{ role: any }>>('/users/roles', roleData),
-  
-  getRole: (roleId: number) => api.get<ApiResponse<{ role: any }>>(`/users/roles/${roleId}`),
-  
-  updateRole: (roleId: number, roleData: any) => api.put<ApiResponse<{ role: any }>>(`/users/roles/${roleId}`, roleData),
-  
-  deleteRole: (roleId: number) => api.delete<ApiResponse>(`/users/roles/${roleId}`)
-};
-
 // Clients API
 export const clientsApi = {
-  list: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
-    api.get<PaginatedResponse<any>>('/clients', { params }),
+  list: async (params?: { page?: number; limit?: number; search?: string; status?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const response = await fetch(`/api/clients?${queryParams}`, {
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch clients');
+    }
+    
+    return response.json();
+  },
   
-  create: (clientData: any) => api.post<ApiResponse<{ client: any }>>('/clients', clientData),
+  create: async (clientData: any) => {
+    const response = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-User-Email': getUserEmail()
+      },
+      body: JSON.stringify(clientData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create client');
+    }
+    
+    return response.json();
+  },
   
-  get: (clientId: number) => api.get<ApiResponse<{ client: any; aws_mappings: any[]; assigned_managers: any[] }>>(`/clients/${clientId}`),
+  get: async (clientId: number) => {
+    const response = await fetch(`/api/clients/${clientId}`, {
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch client');
+    }
+    
+    return response.json();
+  },
   
-  update: (clientId: number, clientData: any) => api.put<ApiResponse<{ client: any }>>(`/clients/${clientId}`, clientData),
+  update: async (clientId: number, clientData: any) => {
+    const response = await fetch(`/api/clients/${clientId}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-User-Email': getUserEmail()
+      },
+      body: JSON.stringify(clientData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update client');
+    }
+    
+    return response.json();
+  },
   
-  delete: (clientId: number) => api.delete<ApiResponse>(`/clients/${clientId}`),
-  
-  getAwsMappings: (clientId: number) => api.get<ApiResponse<{ aws_account_ids: string[]; aws_mappings: any[] }>>(`/clients/${clientId}/aws`),
-  
-  assignManager: (clientId: number, userId: number) => api.post<ApiResponse>(`/clients/${clientId}/assign`, { user_id: userId }),
-  
-  unassignManager: (clientId: number, userId: number) => api.post<ApiResponse>(`/clients/${clientId}/unassign`, { user_id: userId })
+  delete: async (clientId: number) => {
+    const response = await fetch(`/api/clients/${clientId}`, {
+      method: 'DELETE',
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete client');
+    }
+    
+    return response.json();
+  }
 };
 
 // Analytics API
 export const analyticsApi = {
-  getSuperAdminAnalytics: () => {
-    const userData = localStorage.getItem('user_data');
-    const userEmail = userData ? JSON.parse(userData).email : '';
+  getSuperAdminAnalytics: async () => {
+    const response = await fetch('/api/analytics/super-admin', { 
+      headers: { 'X-User-Email': getUserEmail() }
+    });
     
-    return fetch('/api/analytics/super-admin', { 
-      headers: { 'X-User-Email': userEmail }
-    }).then(r => r.json());
+    if (!response.ok) {
+      throw new Error('Failed to fetch analytics');
+    }
+    
+    return response.json();
   },
   
-  getClientManagerAnalytics: () => {
-    const userData = localStorage.getItem('user_data');
-    const userEmail = userData ? JSON.parse(userData).email : '';
+  getClientManagerAnalytics: async () => {
+    const response = await fetch('/api/analytics/client-manager', { 
+      headers: { 'X-User-Email': getUserEmail() }
+    });
     
-    return fetch('/api/analytics/client-manager', { 
-      headers: { 'X-User-Email': userEmail }
-    }).then(r => r.json());
+    if (!response.ok) {
+      throw new Error('Failed to fetch analytics');
+    }
+    
+    return response.json();
   },
   
-  getAuditorAnalytics: () => {
-    const userData = localStorage.getItem('user_data');
-    const userEmail = userData ? JSON.parse(userData).email : '';
+  getAuditorAnalytics: async () => {
+    const response = await fetch('/api/analytics/auditor', { 
+      headers: { 'X-User-Email': getUserEmail() }
+    });
     
-    return fetch('/api/analytics/auditor', { 
-      headers: { 'X-User-Email': userEmail }
-    }).then(r => r.json());
-  },
-  
-  cacheAnalytics: () => api.post<ApiResponse>('/analytics/cache'),
-  
-  refreshCache: () => api.put<ApiResponse>('/analytics/cache'),
-  
-  clearCache: () => api.delete<ApiResponse>('/analytics/cache')
+    if (!response.ok) {
+      throw new Error('Failed to fetch analytics');
+    }
+    
+    return response.json();
+  }
 };
 
-export default api;
+// Users API
+export const usersApi = {
+  list: async (params?: { page?: number; limit?: number; search?: string; role_id?: string; status?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const response = await fetch(`/api/users?${queryParams}`, {
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch users');
+    }
+    
+    return response.json();
+  },
+  
+  create: async (userData: any) => {
+    const response = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-User-Email': getUserEmail()
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create user');
+    }
+    
+    return response.json();
+  },
+  
+  update: async (userId: number, userData: any) => {
+    const response = await fetch(`/api/users/${userId}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-User-Email': getUserEmail()
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update user');
+    }
+    
+    return response.json();
+  },
+  
+  delete: async (userId: number) => {
+    const response = await fetch(`/api/users/${userId}`, {
+      method: 'DELETE',
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete user');
+    }
+    
+    return response.json();
+  },
+  
+  listRoles: async () => {
+    const response = await fetch('/api/users/roles', {
+      headers: { 'X-User-Email': getUserEmail() }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch roles');
+    }
+    
+    return response.json();
+  }
+};
