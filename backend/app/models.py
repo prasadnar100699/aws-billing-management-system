@@ -3,10 +3,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
-import enum  # Add this import
-
-print(type(StatusEnum))  # Should be <class 'type'>
-print([type(StatusEnum.ACTIVE), type(StatusEnum.INACTIVE)])  # Should be [<class 'str'>, <class 'str'>]
+import enum
 
 # ===========================
 # ENUM DEFINITIONS
@@ -25,16 +22,19 @@ class CurrencyEnum(enum.Enum):
     USD = 'USD'
     INR = 'INR'
 
-# Add these missing enum definitions (placeholders—customize as needed)
 class MetricTypeEnum(enum.Enum):
     USAGE = 'usage'
     REQUEST = 'request'
     DATA_TRANSFER = 'data_transfer'
+    HOUR = 'hour'
+    GB = 'gb'
+    FIXED = 'fixed'
 
 class BillingMethodEnum(enum.Enum):
     PER_UNIT = 'per_unit'
     PER_HOUR = 'per_hour'
     MONTHLY = 'monthly'
+    TIERED = 'tiered'
 
 class InvoicePreferenceEnum(enum.Enum):
     MONTHLY = 'monthly'
@@ -44,7 +44,7 @@ class InvoicePreferenceEnum(enum.Enum):
 class ImportSourceEnum(enum.Enum):
     CSV = 'csv'
     API = 'api'
-    CUR = 'cur'  # AWS Cost and Usage Report
+    CUR = 'cur'
 
 class ImportStatusEnum(enum.Enum):
     PENDING = 'pending'
@@ -57,6 +57,7 @@ class DocumentTypeEnum(enum.Enum):
     RECEIPT = 'receipt'
     CONTRACT = 'contract'
     REPORT = 'report'
+    OTHER = 'other'
 
 class NotificationTypeEnum(enum.Enum):
     EMAIL = 'email'
@@ -67,6 +68,15 @@ class NotificationStatusEnum(enum.Enum):
     PENDING = 'pending'
     SENT = 'sent'
     FAILED = 'failed'
+
+# ===========================
+# ASSOCIATION TABLES
+# ===========================
+user_client_mappings = db.Table('user_client_mappings',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.user_id'), primary_key=True),
+    db.Column('client_id', db.Integer, db.ForeignKey('clients.client_id'), primary_key=True),
+    db.Column('assigned_at', db.DateTime, default=datetime.utcnow)
+)
 
 # ===========================
 # ROLE & ACCESS MODELS
@@ -120,6 +130,9 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationships
+    assigned_clients = db.relationship('Client', secondary=user_client_mappings, back_populates='assigned_managers')
+
     def get_id(self):
         return str(self.user_id)
 
@@ -132,7 +145,7 @@ class User(UserMixin, db.Model):
             return check_password_hash(self.password_hash, password)
         else:
             # For demo purposes, allow plain text comparison
-            return self.password_hash == password or password == 'password123'
+            return self.password_hash == password
 
     def has_permission(self, module_name, action):
         """Check if user has permission for a specific action on a module"""
@@ -148,7 +161,7 @@ class User(UserMixin, db.Model):
             'email': self.email,
             'role_id': self.role_id,
             'role_name': self.role.role_name if self.role else None,
-            'status': self.status,
+            'status': self.status.value,
             'last_login': self.last_login.isoformat() if self.last_login else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -158,7 +171,7 @@ class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
 
     log_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     action = db.Column(db.String(100), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     details = db.Column(db.Text)
@@ -176,6 +189,9 @@ class AuditLog(db.Model):
             'user_agent': self.user_agent
         }
 
+# ===========================
+# CLIENT MODELS
+# ===========================
 class Client(db.Model):
     __tablename__ = 'clients'
     
@@ -188,11 +204,16 @@ class Client(db.Model):
     gst_registered = db.Column(db.Boolean, default=False)
     gst_number = db.Column(db.String(15))
     billing_address = db.Column(db.Text)
-    invoice_preferences = db.Column(db.String(20), default='monthly')
-    default_currency = db.Column(db.String(3), default='USD')
+    invoice_preferences = db.Column(db.Enum(InvoicePreferenceEnum), default=InvoicePreferenceEnum.MONTHLY)
+    default_currency = db.Column(db.Enum(CurrencyEnum), default=CurrencyEnum.USD)
     status = db.Column(db.Enum(StatusEnum), default=StatusEnum.ACTIVE)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    assigned_managers = db.relationship('User', secondary=user_client_mappings, back_populates='assigned_clients')
+    aws_mappings = db.relationship('ClientAwsMapping', backref='client', lazy=True, cascade='all, delete-orphan')
+    invoices = db.relationship('Invoice', backref='client', lazy=True)
     
     def get_aws_account_ids(self):
         """Get AWS account IDs as a list"""
@@ -221,9 +242,9 @@ class Client(db.Model):
             'gst_registered': self.gst_registered,
             'gst_number': self.gst_number,
             'billing_address': self.billing_address,
-            'invoice_preferences': self.invoice_preferences,
-            'default_currency': self.default_currency,
-            'status': self.status,
+            'invoice_preferences': self.invoice_preferences.value,
+            'default_currency': self.default_currency.value,
+            'status': self.status.value,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -246,6 +267,9 @@ class ClientAwsMapping(db.Model):
             'billing_tag_value': self.billing_tag_value
         }
 
+# ===========================
+# SERVICE MODELS
+# ===========================
 class ServiceCategory(db.Model):
     __tablename__ = 'service_categories'
     
@@ -299,7 +323,7 @@ class PricingComponent(db.Model):
     metric_type = db.Column(db.Enum(MetricTypeEnum), nullable=False)
     rate = db.Column(db.Numeric(10, 4), nullable=False) 
     unit = db.Column(db.String(20), nullable=False)
-    quantity = db.Column(db.Numeric(10, 2), nullable=False)
+    quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1)
     billing_method = db.Column(db.Enum(BillingMethodEnum), default=BillingMethodEnum.PER_UNIT)
     currency = db.Column(db.Enum(CurrencyEnum), default=CurrencyEnum.USD)
     tier_rules = db.Column(db.Text)  # JSON string for tiered pricing
@@ -332,12 +356,16 @@ class PricingComponent(db.Model):
             'metric_type': self.metric_type.value,
             'unit': self.unit,
             'rate': float(self.rate),
+            'quantity': float(self.quantity),
             'billing_method': self.billing_method.value,
             'currency': self.currency.value,
             'tier_rules': self.get_tier_rules(),
             'status': self.status.value
         }
 
+# ===========================
+# INVOICE MODELS
+# ===========================
 class Invoice(db.Model):
     __tablename__ = 'invoices'
     
@@ -346,18 +374,51 @@ class Invoice(db.Model):
     invoice_number = db.Column(db.String(50), unique=True, nullable=False)
     invoice_date = db.Column(db.DateTime, default=datetime.utcnow)
     due_date = db.Column(db.DateTime)
-    subtotal = db.Column(db.Numeric(12, 2), default=0)
-    gst_amount = db.Column(db.Numeric(12, 2), default=0)
-    total_amount = db.Column(db.Numeric(12, 2), default=0)
-    currency = db.Column(db.Enum(CurrencyEnum), default=CurrencyEnum.USD)
+    usd_to_inr_rate = db.Column(db.Numeric(8, 4))
+    gst_applicable = db.Column(db.Boolean, default=False)
+    invoice_notes = db.Column(db.Text)
     status = db.Column(db.Enum(InvoiceStatusEnum), default=InvoiceStatusEnum.DRAFT)
+    pdf_path = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    client = db.relationship('Client', backref='invoices')
+    line_items = db.relationship('InvoiceLineItem', backref='invoice', lazy=True, cascade='all, delete-orphan')
+    attachments = db.relationship('InvoiceAttachment', backref='invoice', lazy=True, cascade='all, delete-orphan')
+    
+    def generate_invoice_number(self):
+        """Generate invoice number in format: TejIT-{clientID}-{YYYYMM}-{sequence}"""
+        if not self.invoice_number:
+            year_month = datetime.now().strftime('%Y%m')
+            # Get the next sequence number for this client and month
+            last_invoice = Invoice.query.filter(
+                Invoice.client_id == self.client_id,
+                Invoice.invoice_number.like(f'TejIT-{self.client_id:03d}-{year_month}-%')
+            ).order_by(Invoice.invoice_number.desc()).first()
+            
+            if last_invoice:
+                # Extract sequence number and increment
+                parts = last_invoice.invoice_number.split('-')
+                sequence = int(parts[-1]) + 1
+            else:
+                sequence = 1
+            
+            self.invoice_number = f'TejIT-{self.client_id:03d}-{year_month}-{sequence:03d}'
+    
+    def calculate_totals(self):
+        """Calculate invoice totals"""
+        subtotal = sum(item.calculate_amount() for item in self.line_items)
+        gst_amount = subtotal * 0.18 if self.gst_applicable else 0
+        total = subtotal + gst_amount
+        
+        return {
+            'subtotal': float(subtotal),
+            'gst_amount': float(gst_amount),
+            'total': float(total)
+        }
     
     def to_dict(self):
+        totals = self.calculate_totals()
         return {
             'invoice_id': self.invoice_id,
             'client_id': self.client_id,
@@ -365,11 +426,11 @@ class Invoice(db.Model):
             'invoice_number': self.invoice_number,
             'invoice_date': self.invoice_date.isoformat() if self.invoice_date else None,
             'due_date': self.due_date.isoformat() if self.due_date else None,
-            'subtotal': float(self.subtotal) if self.subtotal else 0,
-            'gst_amount': float(self.gst_amount) if self.gst_amount else 0,
-            'total_amount': float(self.total_amount) if self.total_amount else 0,
-            'currency': self.currency,
-            'status': self.status,
+            'usd_to_inr_rate': float(self.usd_to_inr_rate) if self.usd_to_inr_rate else None,
+            'gst_applicable': self.gst_applicable,
+            'invoice_notes': self.invoice_notes,
+            'status': self.status.value,
+            'pdf_path': self.pdf_path,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'line_items': [item.to_dict() for item in self.line_items],
@@ -438,6 +499,9 @@ class InvoiceTemplate(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Relationships
+    client = db.relationship('Client', backref='invoice_templates')
+    
     def get_services(self):
         """Get services as a list"""
         if self.services:
@@ -465,6 +529,9 @@ class InvoiceTemplate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+# ===========================
+# USAGE IMPORT MODELS
+# ===========================
 class UsageImport(db.Model):
     __tablename__ = 'usage_imports'
     
@@ -478,6 +545,9 @@ class UsageImport(db.Model):
     file_path = db.Column(db.String(255))
     import_date = db.Column(db.DateTime, default=datetime.utcnow)
     processed_at = db.Column(db.DateTime)
+    
+    # Relationships
+    client = db.relationship('Client', backref='usage_imports')
     
     def to_dict(self):
         return {
@@ -494,6 +564,9 @@ class UsageImport(db.Model):
             'processed_at': self.processed_at.isoformat() if self.processed_at else None
         }
 
+# ===========================
+# DOCUMENT MODELS
+# ===========================
 class Document(db.Model):
     __tablename__ = 'documents'
     
@@ -506,6 +579,11 @@ class Document(db.Model):
     file_path = db.Column(db.String(255), nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.client_id'))
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoices.invoice_id'))
+    
+    # Relationships
+    uploaded_by_user = db.relationship('User', backref='uploaded_documents')
+    client = db.relationship('Client', backref='documents')
+    invoice = db.relationship('Invoice', backref='documents')
     
     def to_dict(self):
         return {
@@ -523,6 +601,9 @@ class Document(db.Model):
             'invoice_number': self.invoice.invoice_number if self.invoice else None
         }
 
+# ===========================
+# NOTIFICATION MODELS
+# ===========================
 class Notification(db.Model):
     __tablename__ = 'notifications'
     
@@ -535,6 +616,10 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     sent_at = db.Column(db.DateTime)
     retry_count = db.Column(db.Integer, default=0)
+    
+    # Relationships
+    user = db.relationship('User', backref='notifications')
+    client = db.relationship('Client', backref='notifications')
     
     def to_dict(self):
         return {
@@ -550,137 +635,3 @@ class Notification(db.Model):
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'retry_count': self.retry_count
         }
-
-
-# ===========================
-# LOGIN MANAGER CONFIGURATION
-# ===========================
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-
-# ===========================
-# SEEDING FUNCTIONS
-# ===========================
-def seed_roles():
-    """Seed default roles with permissions"""
-    if Role.query.count() == 0:
-        # Super Admin - Full access
-        super_admin = Role(role_name='Super Admin', description='Full system access')
-        super_admin.module_access = [
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='dashboard', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='clients', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='invoices', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='services', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='usage', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='reports', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=super_admin.role_id, module_name='users', can_view=True, can_create=True, can_edit=True, can_delete=True),
-        ]
-        
-        # Client Manager - Client and invoice management
-        client_manager = Role(role_name='Client Manager', description='Manage clients & invoices')
-        client_manager.module_access = [
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='dashboard', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='clients', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='invoices', can_view=True, can_create=True, can_edit=True, can_delete=True),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='services', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='usage', can_view=True, can_create=True, can_edit=True, can_delete=False),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='reports', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=client_manager.role_id, module_name='users', can_view=False, can_create=False, can_edit=False, can_delete=False),
-        ]
-        
-        # Auditor - Reports and analytics only
-        auditor = Role(role_name='Auditor', description='Reports & analytics')
-        auditor.module_access = [
-            RoleModuleAccess(role_id=auditor.role_id, module_name='dashboard', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='clients', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='invoices', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='services', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='usage', can_view=True, can_create=False, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='reports', can_view=True, can_create=True, can_edit=False, can_delete=False),
-            RoleModuleAccess(role_id=auditor.role_id, module_name='users', can_view=False, can_create=False, can_edit=False, can_delete=False),
-        ]
-        
-        db.session.add_all([super_admin, client_manager, auditor])
-        db.session.commit()
-        print("Roles seeded successfully.")
-    else:
-        print("Roles already exist.")
-
-
-def seed_demo_users():
-    """Seed demo users with hashed passwords"""
-    if User.query.count() == 0:
-        from werkzeug.security import generate_password_hash
-        
-        # Create demo users
-        admin = User(
-            username='admin',
-            email='admin@tejit.com',
-            role_id=1,  # Super Admin
-            status=StatusEnum.ACTIVE
-        )
-        admin.set_password('Admin@123')
-        
-        manager = User(
-            username='manager',
-            email='manager@tejit.com',
-            role_id=2,  # Client Manager
-            status=StatusEnum.ACTIVE
-        )
-        manager.set_password('Manager@123')
-        
-        auditor = User(
-            username='auditor',
-            email='auditor@tejit.com',
-            role_id=3,  # Auditor
-            status=StatusEnum.ACTIVE
-        )
-        auditor.set_password('Auditor@123')
-        
-        db.session.add_all([admin, manager, auditor])
-        db.session.commit()
-        print("Demo users seeded successfully.")
-    else:
-        print("Demo users already exist.")
-
-
-def seed_demo_data():
-    """Seed all demo data"""
-    seed_roles()
-    seed_demo_users()
-    print("Demo data seeding completed.")
-
-
-# ===========================
-# UTILITY FUNCTIONS
-# ===========================
-def create_tables():
-    """Create all database tables"""
-    db.create_all()
-    print("Database tables created successfully.")
-
-
-def drop_tables():
-    """Drop all database tables"""
-    db.drop_all()
-    print("Database tables dropped successfully.")
-
-
-if __name__ == '__main__':
-    # Example usage - run from command line
-    # python models.py seed
-    import sys
-    if len(sys.argv) > 1:
-        command = sys.argv[1]
-        if command == 'create':
-            create_tables()
-        elif command == 'drop':
-            drop_tables()
-        elif command == 'seed':
-            seed_demo_data()
-        else:
-            print("Usage: python models.py [create|drop|seed]")
-    else:
-        print("Usage: python models.py [create|drop|seed]")
