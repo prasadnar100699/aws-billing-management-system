@@ -23,7 +23,7 @@ export function useAuth() {
   const checkAuth = async () => {
     try {
       const userData = localStorage.getItem('user_data');
-      
+
       if (!userData) {
         setLoading(false);
         return;
@@ -32,11 +32,11 @@ export function useAuth() {
       // Parse stored user data
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
-      
+
       // Set basic permissions based on role
       const rolePermissions = getRolePermissions(parsedUser.role_name);
       setPermissions(rolePermissions);
-      
+
     } catch (error) {
       console.error('Auth check error:', error);
       localStorage.removeItem('user_data');
@@ -63,48 +63,12 @@ export function useAuth() {
       if (response.ok) {
         // Store auth data
         localStorage.setItem('user_data', JSON.stringify(data));
-        
         setUser(data);
-        
+
         // Set permissions
-        const rolePermissions = getRolePermissions(data.role);
+        const rolePermissions = getRolePermissions(data.role_name);
         setPermissions(rolePermissions);
-        
-        router.push('/dashboard');
-        return data;
-      } else {
-        throw new Error(data.error || 'Login failed');
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
 
-  const logout = async () => {
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-        email,
-        password
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Store auth data
-        localStorage.setItem('user_data', JSON.stringify(data));
-        
-        setUser(data);
-        
-        // Set permissions
-        const rolePermissions = getRolePermissions(data.role);
-        setPermissions(rolePermissions);
-        
         router.push('/dashboard');
         return data;
       } else {
@@ -128,10 +92,10 @@ export function useAuth() {
 
   const hasPermission = (module: string, action: string): boolean => {
     if (!user) return false;
-    
+
     // Super Admin has all permissions
     if (user.role_name === 'Super Admin') return true;
-    
+
     return permissions[module]?.[`can_${action}`] || false;
   };
 
@@ -170,7 +134,7 @@ export function useAuth() {
         notifications: { can_view: true, can_create: false, can_edit: false, can_delete: false }
       }
     };
-    
+
     return permissions[roleName] || {};
   };
 
