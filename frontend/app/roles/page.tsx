@@ -26,6 +26,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 interface Role {
   role_id: number;
@@ -354,6 +355,7 @@ export default function RolesPage() {
   }
 
   return (
+    <ProtectedRoute requiredRole={['Super Admin']}>
     <div className="flex h-screen bg-gray-50">
       <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
       
@@ -633,5 +635,6 @@ export default function RolesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </ProtectedRoute>
   );
 }

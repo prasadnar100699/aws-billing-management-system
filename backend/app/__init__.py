@@ -91,6 +91,9 @@ def create_app(config_class=Config):
     from app.analytics import bp as analytics_bp
     app.register_blueprint(analytics_bp)
     
+    from app.health import bp as health_bp
+    app.register_blueprint(health_bp)
+    
     return app
 
 # User loader for Flask-Login

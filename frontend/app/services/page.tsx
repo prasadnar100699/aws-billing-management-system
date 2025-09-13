@@ -29,6 +29,7 @@ import {
   Filter,
   DollarSign
 } from 'lucide-react';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 interface ServiceCategory {
   category_id: number;
@@ -458,6 +459,7 @@ export default function ServicesPage() {
   const canModify = user.role_name === 'Super Admin';
 
   return (
+    <ProtectedRoute requiredPermission={{ module: 'services', action: 'view' }}>
     <div className="flex h-screen bg-gray-50">
       <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
       
@@ -942,5 +944,6 @@ export default function ServicesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </ProtectedRoute>
   );
 }

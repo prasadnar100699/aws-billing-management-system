@@ -64,88 +64,40 @@ Before running the application, ensure you have:
 
 ## 🚀 Quick Start
 
-### 1. Clone and Install Dependencies
+### Option 1: Docker Compose (Recommended)
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd aws-billing-system
+# Start the complete system with Docker
+python start-system.py
 
-# Install dependencies
+# Or manually with docker-compose
+docker-compose up --build -d
+```
+
+### Option 2: Development Mode
+
+```bash
+# Install backend dependencies
+cd backend
+pip install -r requirements.txt
+
+# Install frontend dependencies
+cd ../frontend
 npm install
+
+# Start both servers
+cd ..
+python start-system.py
 ```
 
-### 2. Database Setup
+### Access the Application
 
-```bash
-# Create MySQL database
-mysql -u root -p
-CREATE DATABASE aws_billing_system;
-USE aws_billing_system;
-
-# Import schema
-mysql -u root -p aws_billing_system < database/schema.sql
-```
-
-### 3. Environment Configuration
-
-Create a `.env.local` file in the root directory:
-
-```bash
-# Database Configuration
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=aws_billing_system
-DB_USER=root
-DB_PASSWORD=your_password
-
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=24h
-
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-
-# Email Configuration (Optional)
-SMTP_HOST=your-smtp-host
-SMTP_PORT=587
-SMTP_USER=your-email
-SMTP_PASS=your-password
-
-# AWS Configuration (Optional)
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_REGION=us-east-1
-AWS_S3_BUCKET=your-bucket-name
-
-# Application Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-UPLOAD_DIR=./uploads
-```
-
-### 4. Start Development Servers
-
-```bash
-# Start the Next.js development server
-npm run dev
-
-# In separate terminals:
-# Start Redis server
-redis-server
-
-# Start background job processor (if implemented)
-npm run worker
-```
-
-### 5. Access the Application
-
-- **Application**: http://localhost:3000
+- **Frontend Application**: http://localhost:3002
+- **Backend API**: http://localhost:5002/api
 - **Default Credentials**:
-  - Super Admin: `admin@tejit.com` / `password123`
-  - Client Manager: `manager@tejit.com` / `password123`
-  - Auditor: `auditor@tejit.com` / `password123`
+  - Super Admin: `admin@tejit.com` / `password`
+  - Client Manager: `manager@tejit.com` / `password`
+  - Auditor: `auditor@tejit.com` / `password`
 
 ## 📁 Project Structure
 

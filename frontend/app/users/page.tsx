@@ -26,6 +26,7 @@ import {
   Filter,
   MoreHorizontal
 } from 'lucide-react';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 interface User {
   user_id: number;
@@ -294,6 +295,7 @@ export default function UsersPage() {
   }
 
   return (
+    <ProtectedRoute requiredRole={['Super Admin']}>
     <div className="flex h-screen bg-gray-50">
       <Sidebar isCollapsed={isCollapsed} onToggle={() => setIsCollapsed(!isCollapsed)} />
       
@@ -613,5 +615,6 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </ProtectedRoute>
   );
 }

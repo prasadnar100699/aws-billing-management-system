@@ -310,6 +310,26 @@ export default function LoginPage() {
                       Click any role above to auto-fill credentials
                     </p>
                   </div>
+
+                  {/* Signup Link */}
+                  <div className="text-center">
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-200"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-4 bg-white text-gray-500">New to the platform?</span>
+                      </div>
+                    </div>
+                    
+                    <Button 
+                      variant="ghost" 
+                      className="mt-4 w-full"
+                      onClick={() => router.push('/signup')}
+                    >
+                      Create New Account
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -29,21 +29,23 @@ export class AuthService {
     try {
       const response = await authApi.login({ email, password });
       
-      if (response.data) {
-        const authData = response.data;
+      const authData = response.data;
+      if (authData) {
         const user = {
           user_id: authData.user_id,
           username: authData.username,
           email: authData.email,
           role_name: authData.role_name,
           role_id: authData.role_id,
-          status: 'active'
+          status: authData.status || 'active'
         };
         
         // Store auth data
-        localStorage.setItem('auth_token', authData.token);
-        localStorage.setItem('user_data', JSON.stringify(user));
-        localStorage.setItem('token_expires', (Date.now() + authData.expires_in * 1000).toString());
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', authData.token);
+          localStorage.setItem('user_data', JSON.stringify(user));
+          localStorage.setItem('token_expires', (Date.now() + authData.expires_in * 1000).toString());
+        }
         
         return { user, token: authData.token, expires_in: authData.expires_in };
       }
@@ -92,6 +94,8 @@ export class AuthService {
   }
 
   isAuthenticated(): boolean {
+    if (typeof window === 'undefined') return false;
+    
     const token = localStorage.getItem('auth_token');
     const expires = localStorage.getItem('token_expires');
     
@@ -103,11 +107,15 @@ export class AuthService {
   }
 
   getUser(): User | null {
+    if (typeof window === 'undefined') return null;
+    
     const userData = localStorage.getItem('user_data');
     return userData ? JSON.parse(userData) : null;
   }
 
   getToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    
     return localStorage.getItem('auth_token');
   }
 
@@ -153,6 +161,8 @@ export class AuthService {
   }
 
   private clearAuthData(): void {
+    if (typeof window === 'undefined') return;
+    
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     localStorage.removeItem('token_expires');
