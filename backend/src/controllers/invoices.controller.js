@@ -1,9 +1,4 @@
-const { Invoice, InvoiceLineItem, Client, PricingComponent } = require('../models');
-const AuditService = require('../services/audit.service');
-const PDFService = require('../services/pdf.service');
-const EmailService = require('../services/email.service');
-const { success, error, paginated } = require('../utils/response');
-const { Op } = require('sequelize');
+const { getMany, getOne, insert, update, deleteRecord } = require('../config/db');
 
 class InvoicesController {
   async createInvoice(req, res) {
@@ -11,45 +6,37 @@ class InvoicesController {
       const { client_id, invoice_date, due_date, line_items, ...invoiceData } = req.body;
 
       if (!client_id) {
-        return error(res, 'client_id is required', 400);
+        return res.status(400).json({ error: 'client_id is required' });
       }
 
-      // Validate client exists and user has access
-      const client = await Client.findByPk(client_id, {
-        include: [{ model: require('../models').User, as: 'assignedManagers' }]
-      });
-
+      // Validate client exists
+      const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [client_id]);
       if (!client) {
-        return error(res, 'Client not found', 404);
+        return res.status(404).json({ error: 'Client not found' });
       }
 
-      // Check if Client Manager has access to this client
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
-        }
-      }
+      // Generate invoice number
+      const invoiceNumber = await this.generateInvoiceNumber(client_id);
 
       // Create invoice
-      const invoice = await Invoice.create({
+      const invoiceDataToInsert = {
         client_id,
+        invoice_number: invoiceNumber,
         invoice_date: invoice_date ? new Date(invoice_date) : new Date(),
         due_date: due_date ? new Date(due_date) : null,
         gst_applicable: invoiceData.gst_applicable !== undefined ? invoiceData.gst_applicable : client.gst_registered,
-        ...invoiceData
-      });
+        invoice_notes: invoiceData.invoice_notes || null,
+        status: 'draft'
+      };
 
-      // Generate invoice number
-      await invoice.generateInvoiceNumber();
-      await invoice.save();
+      const invoiceId = await insert('invoices', invoiceDataToInsert);
 
-      // Add line items
+      // Add line items if provided
       if (line_items && Array.isArray(line_items)) {
         for (const itemData of line_items) {
-          await InvoiceLineItem.create({
-            invoice_id: invoice.invoice_id,
-            component_id: itemData.component_id,
+          await insert('invoice_line_items', {
+            invoice_id: invoiceId,
+            component_id: itemData.component_id || null,
             description: itemData.description,
             quantity: itemData.quantity,
             rate: itemData.rate,
@@ -59,20 +46,14 @@ class InvoicesController {
         }
       }
 
-      await AuditService.logUserAction(req.user.user_id, 'create_invoice', `Created invoice: ${invoice.invoice_number}`, req);
-
-      // Fetch complete invoice with line items
-      const completeInvoice = await Invoice.findByPk(invoice.invoice_id, {
-        include: [
-          { model: Client, as: 'client' },
-          { model: InvoiceLineItem, as: 'lineItems' }
-        ]
+      res.status(201).json({
+        success: true,
+        message: 'Invoice created successfully',
+        data: { invoice: { invoice_id: invoiceId, ...invoiceDataToInsert } }
       });
-
-      success(res, { invoice: completeInvoice }, 'Invoice created successfully', 201);
-    } catch (err) {
-      console.error('Create invoice error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Create invoice error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -85,60 +66,58 @@ class InvoicesController {
       const clientId = req.query.client_id;
       const offset = (page - 1) * limit;
 
-      // Build where clause
-      const whereClause = {};
-      
+      let whereClause = '1=1';
+      let params = [];
+
+      if (search) {
+        whereClause += ' AND (i.invoice_number LIKE ? OR i.invoice_notes LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`);
+      }
+
       if (status) {
-        whereClause.status = status;
+        whereClause += ' AND i.status = ?';
+        params.push(status);
       }
 
       if (clientId) {
-        whereClause.client_id = clientId;
+        whereClause += ' AND i.client_id = ?';
+        params.push(clientId);
       }
 
-      // Build include clause
-      const include = [{
-        model: Client,
-        as: 'client',
-        attributes: ['client_id', 'client_name', 'email']
-      }];
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total 
+        FROM invoices i 
+        JOIN clients c ON i.client_id = c.client_id 
+        WHERE ${whereClause}
+      `;
+      const countResult = await getOne(countQuery, params);
+      const total = countResult.total;
 
-      // For Client Managers, only show invoices for assigned clients
-      if (req.user.role.role_name === 'Client Manager') {
-        include[0].include = [{
-          model: User,
-          as: 'assignedManagers',
-          where: { user_id: req.user.user_id },
-          required: true,
-          attributes: []
-        }];
-      }
+      // Get invoices with client info
+      const query = `
+        SELECT i.*, c.client_name, c.email as client_email
+        FROM invoices i
+        JOIN clients c ON i.client_id = c.client_id
+        WHERE ${whereClause}
+        ORDER BY i.invoice_date DESC
+        LIMIT ? OFFSET ?
+      `;
+      const invoices = await getMany(query, [...params, limit, offset]);
 
-      // Add search filter
-      if (search) {
-        whereClause[Op.or] = [
-          { invoice_number: { [Op.like]: `%${search}%` } },
-          { invoice_notes: { [Op.like]: `%${search}%` } }
-        ];
-      }
-
-      const { count, rows } = await Invoice.findAndCountAll({
-        where: whereClause,
-        include,
-        limit,
-        offset,
-        order: [['invoice_date', 'DESC']]
+      res.json({
+        success: true,
+        data: invoices,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          current_page: page,
+          per_page: limit
+        }
       });
-
-      paginated(res, rows, {
-        total: count,
-        pages: Math.ceil(count / limit),
-        current_page: page,
-        per_page: limit
-      });
-    } catch (err) {
-      console.error('List invoices error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('List invoices error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -146,45 +125,42 @@ class InvoicesController {
     try {
       const invoiceId = parseInt(req.params.id);
       
-      const invoice = await Invoice.findByPk(invoiceId, {
-        include: [
-          { 
-            model: Client, 
-            as: 'client',
-            include: [{ model: User, as: 'assignedManagers' }]
-          },
-          { 
-            model: InvoiceLineItem, 
-            as: 'lineItems',
-            include: [{ model: PricingComponent, as: 'pricingComponent' }]
-          }
-        ]
-      });
+      const invoice = await getOne(`
+        SELECT i.*, c.client_name, c.email as client_email, c.gst_registered
+        FROM invoices i
+        JOIN clients c ON i.client_id = c.client_id
+        WHERE i.invoice_id = ?
+      `, [invoiceId]);
 
       if (!invoice) {
-        return error(res, 'Invoice not found', 404);
+        return res.status(404).json({ error: 'Invoice not found' });
       }
 
-      // Check if Client Manager has access to this invoice
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = invoice.client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
-        }
-      }
+      // Get line items
+      const lineItems = await getMany(`
+        SELECT ili.*, pc.component_name, s.service_name
+        FROM invoice_line_items ili
+        LEFT JOIN pricing_components pc ON ili.component_id = pc.component_id
+        LEFT JOIN services s ON pc.service_id = s.service_id
+        WHERE ili.invoice_id = ?
+      `, [invoiceId]);
 
       // Calculate totals
-      const totals = await invoice.calculateTotals();
+      const totals = this.calculateTotals(lineItems, invoice.gst_applicable);
 
-      success(res, {
-        invoice: {
-          ...invoice.toJSON(),
-          totals
+      res.json({
+        success: true,
+        data: {
+          invoice: {
+            ...invoice,
+            totals
+          },
+          line_items: lineItems
         }
       });
-    } catch (err) {
-      console.error('Get invoice error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Get invoice error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -192,59 +168,26 @@ class InvoicesController {
     try {
       const invoiceId = parseInt(req.params.id);
       
-      const invoice = await Invoice.findByPk(invoiceId, {
-        include: [
-          { 
-            model: Client, 
-            as: 'client',
-            include: [{ model: User, as: 'assignedManagers' }]
-          }
-        ]
-      });
-
+      const invoice = await getOne('SELECT * FROM invoices WHERE invoice_id = ?', [invoiceId]);
       if (!invoice) {
-        return error(res, 'Invoice not found', 404);
-      }
-
-      // Check if Client Manager has access to this invoice
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = invoice.client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
-        }
+        return res.status(404).json({ error: 'Invoice not found' });
       }
 
       // Check if invoice can be edited
       if (['finalized', 'sent'].includes(invoice.status)) {
-        return error(res, 'Cannot edit finalized or sent invoice', 400);
+        return res.status(400).json({ error: 'Cannot edit finalized or sent invoice' });
       }
 
-      // Update invoice
-      await invoice.update(req.body);
+      await update('invoices', req.body, 'invoice_id = ?', [invoiceId]);
 
-      // Update line items if provided
-      if (req.body.line_items) {
-        await InvoiceLineItem.destroy({ where: { invoice_id: invoiceId } });
-        
-        for (const itemData of req.body.line_items) {
-          await InvoiceLineItem.create({
-            invoice_id: invoiceId,
-            component_id: itemData.component_id,
-            description: itemData.description,
-            quantity: itemData.quantity,
-            rate: itemData.rate,
-            discount: itemData.discount || 0,
-            currency: itemData.currency || 'USD'
-          });
-        }
-      }
-
-      await AuditService.logUserAction(req.user.user_id, 'update_invoice', `Updated invoice: ${invoice.invoice_number}`, req);
-
-      success(res, { invoice }, 'Invoice updated successfully');
-    } catch (err) {
-      console.error('Update invoice error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'Invoice updated successfully',
+        data: { invoice: { ...invoice, ...req.body } }
+      });
+    } catch (error) {
+      console.error('Update invoice error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -252,126 +195,63 @@ class InvoicesController {
     try {
       const invoiceId = parseInt(req.params.id);
       
-      const invoice = await Invoice.findByPk(invoiceId, {
-        include: [
-          { 
-            model: Client, 
-            as: 'client',
-            include: [{ model: User, as: 'assignedManagers' }]
-          }
-        ]
-      });
-
+      const invoice = await getOne('SELECT * FROM invoices WHERE invoice_id = ?', [invoiceId]);
       if (!invoice) {
-        return error(res, 'Invoice not found', 404);
-      }
-
-      // Check if Client Manager has access to this invoice
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = invoice.client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
-        }
+        return res.status(404).json({ error: 'Invoice not found' });
       }
 
       // Only allow deletion of draft invoices
       if (invoice.status !== 'draft') {
-        return error(res, 'Can only delete draft invoices', 400);
+        return res.status(400).json({ error: 'Can only delete draft invoices' });
       }
 
-      await invoice.destroy();
+      await deleteRecord('invoices', 'invoice_id = ?', [invoiceId]);
 
-      await AuditService.logUserAction(req.user.user_id, 'delete_invoice', `Deleted invoice: ${invoice.invoice_number}`, req);
-
-      success(res, null, 'Invoice deleted successfully');
-    } catch (err) {
-      console.error('Delete invoice error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'Invoice deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete invoice error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  async generatePDF(req, res) {
-    try {
-      const invoiceId = parseInt(req.params.id);
-      
-      const invoice = await Invoice.findByPk(invoiceId, {
-        include: [
-          { model: Client, as: 'client' },
-          { model: InvoiceLineItem, as: 'lineItems' }
-        ]
-      });
+  async generateInvoiceNumber(clientId) {
+    const date = new Date();
+    const yearMonth = date.getFullYear().toString() + (date.getMonth() + 1).toString().padStart(2, '0');
+    
+    // Get the next sequence number for this client and month
+    const lastInvoice = await getOne(`
+      SELECT invoice_number 
+      FROM invoices 
+      WHERE client_id = ? AND invoice_number LIKE ?
+      ORDER BY invoice_number DESC 
+      LIMIT 1
+    `, [clientId, `TejIT-${clientId.toString().padStart(3, '0')}-${yearMonth}-%`]);
 
-      if (!invoice) {
-        return error(res, 'Invoice not found', 404);
-      }
-
-      // Generate PDF
-      const pdfPath = await PDFService.generateInvoicePDF(invoice, invoice.client, invoice.lineItems);
-      
-      // Update invoice with PDF path
-      await invoice.update({ pdf_path: pdfPath });
-
-      await AuditService.logUserAction(req.user.user_id, 'generate_pdf', `Generated PDF for invoice: ${invoice.invoice_number}`, req);
-
-      success(res, { pdf_path: pdfPath }, 'PDF generated successfully');
-    } catch (err) {
-      console.error('Generate PDF error:', err);
-      error(res, 'Internal server error', 500);
+    let sequence = 1;
+    if (lastInvoice) {
+      const parts = lastInvoice.invoice_number.split('-');
+      sequence = parseInt(parts[parts.length - 1]) + 1;
     }
+
+    return `TejIT-${clientId.toString().padStart(3, '0')}-${yearMonth}-${sequence.toString().padStart(3, '0')}`;
   }
 
-  async sendInvoice(req, res) {
-    try {
-      const invoiceId = parseInt(req.params.id);
-      const { email_to, email_subject, email_body } = req.body;
-      
-      const invoice = await Invoice.findByPk(invoiceId, {
-        include: [
-          { model: Client, as: 'client' },
-          { model: InvoiceLineItem, as: 'lineItems' }
-        ]
-      });
+  calculateTotals(lineItems, gstApplicable) {
+    const subtotal = lineItems.reduce((sum, item) => {
+      return sum + (parseFloat(item.quantity) * parseFloat(item.rate) * (1 - parseFloat(item.discount || 0) / 100));
+    }, 0);
+    
+    const gstAmount = gstApplicable ? subtotal * 0.18 : 0;
+    const total = subtotal + gstAmount;
 
-      if (!invoice) {
-        return error(res, 'Invoice not found', 404);
-      }
-
-      // Invoice must be finalized to send
-      if (!['finalized', 'sent'].includes(invoice.status)) {
-        return error(res, 'Invoice must be finalized before sending', 400);
-      }
-
-      // Generate PDF if not exists
-      let pdfPath = invoice.pdf_path;
-      if (!pdfPath) {
-        pdfPath = await PDFService.generateInvoicePDF(invoice, invoice.client, invoice.lineItems);
-        await invoice.update({ pdf_path: pdfPath });
-      }
-
-      // Send email
-      const emailResult = await EmailService.sendInvoiceEmail(
-        invoice,
-        invoice.client,
-        pdfPath
-      );
-
-      if (emailResult.success) {
-        await invoice.update({ 
-          status: 'sent',
-          email_sent: true,
-          email_sent_at: new Date()
-        });
-
-        await AuditService.logUserAction(req.user.user_id, 'send_invoice', `Sent invoice: ${invoice.invoice_number}`, req);
-
-        success(res, { email_result: emailResult }, 'Invoice sent successfully');
-      } else {
-        error(res, `Failed to send invoice: ${emailResult.error}`, 500);
-      }
-    } catch (err) {
-      console.error('Send invoice error:', err);
-      error(res, 'Internal server error', 500);
-    }
+    return {
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      gst_amount: parseFloat(gstAmount.toFixed(2)),
+      total: parseFloat(total.toFixed(2))
+    };
   }
 }
 

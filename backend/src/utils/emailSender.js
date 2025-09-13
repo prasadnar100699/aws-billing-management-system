@@ -1,25 +1,24 @@
 const nodemailer = require('nodemailer');
-const config = require('../config/env');
 
-class EmailService {
+class EmailSender {
   constructor() {
     this.transporter = null;
     this.initializeTransporter();
   }
 
   initializeTransporter() {
-    if (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASSWORD) {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
       console.warn('Email configuration not complete. Email features will be disabled.');
       return;
     }
 
     this.transporter = nodemailer.createTransporter({
-      host: config.SMTP_HOST,
-      port: config.SMTP_PORT,
-      secure: config.SMTP_PORT === 465,
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_PORT === '465',
       auth: {
-        user: config.SMTP_USER,
-        pass: config.SMTP_PASSWORD
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD
       }
     });
   }
@@ -32,7 +31,7 @@ class EmailService {
 
     try {
       const mailOptions = {
-        from: `"Tej IT Solutions" <${config.SMTP_USER}>`,
+        from: `"Tej IT Solutions" <${process.env.SMTP_USER}>`,
         to,
         subject,
         html,
@@ -67,11 +66,6 @@ class EmailService {
         
         <p>If you have any questions, please don't hesitate to contact us.</p>
         <p>Best regards,<br>Tej IT Solutions Team</p>
-        
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-        <p style="font-size: 12px; color: #6b7280;">
-          This is an automated email. Please do not reply to this email.
-        </p>
       </div>
     `;
 
@@ -85,22 +79,6 @@ class EmailService {
 
     return await this.sendEmail(client.email, subject, html, attachments);
   }
-
-  async sendNotificationEmail(user, notification) {
-    const subject = `Notification: ${notification.title}`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #2563eb;">${notification.title}</h2>
-        <p>Dear ${user.username},</p>
-        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          ${notification.message}
-        </div>
-        <p>Best regards,<br>Tej IT Solutions Team</p>
-      </div>
-    `;
-
-    return await this.sendEmail(user.email, subject, html);
-  }
 }
 
-module.exports = new EmailService();
+module.exports = new EmailSender();

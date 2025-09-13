@@ -1,27 +1,34 @@
-const { app, initializeApp } = require('./app');
-const config = require('./config/env');
+const app = require('./app');
+const { testConnection } = require('./config/db');
+
+const PORT = process.env.PORT || 5002;
 
 // Initialize and start server
 const startServer = async () => {
   try {
-    // Initialize application
-    await initializeApp();
+    // Test database connection
+    console.log('🔗 Testing database connection...');
+    const dbConnected = await testConnection();
+    
+    if (!dbConnected) {
+      console.error('❌ Database connection failed. Exiting...');
+      process.exit(1);
+    }
 
     // Start HTTP server
-    const server = app.listen(config.PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('🚀 AWS Billing Management System Backend');
-      console.log(`   • Port: ${config.PORT}`);
-      console.log(`   • Environment: ${config.NODE_ENV}`);
-      console.log(`   • Database: ${config.DB_HOST}:${config.DB_PORT}/${config.DB_NAME}`);
-      console.log(`   • CORS Origins: ${config.CORS_ORIGINS.join(', ')}`);
+      console.log(`   • Port: ${PORT}`);
+      console.log(`   • Environment: ${process.env.NODE_ENV}`);
+      console.log(`   • Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+      console.log(`   • CORS Origins: ${process.env.CORS_ORIGINS}`);
       console.log('');
       console.log('📡 API Endpoints:');
-      console.log(`   • Health: http://localhost:${config.PORT}/api/health`);
-      console.log(`   • Auth: http://localhost:${config.PORT}/auth/*`);
-      console.log(`   • Users: http://localhost:${config.PORT}/api/users/*`);
-      console.log(`   • Clients: http://localhost:${config.PORT}/api/clients/*`);
-      console.log(`   • Invoices: http://localhost:${config.PORT}/api/invoices/*`);
-      console.log(`   • Analytics: http://localhost:${config.PORT}/api/analytics/*`);
+      console.log(`   • Health: http://localhost:${PORT}/api/health`);
+      console.log(`   • Auth: http://localhost:${PORT}/auth/*`);
+      console.log(`   • Clients: http://localhost:${PORT}/api/clients/*`);
+      console.log(`   • Invoices: http://localhost:${PORT}/api/invoices/*`);
+      console.log(`   • Analytics: http://localhost:${PORT}/api/analytics/*`);
       console.log('');
       console.log('🎯 Ready to accept connections!');
     });

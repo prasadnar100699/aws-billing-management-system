@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
+const BACKEND_URL = 'http://localhost:5002';
 
 export async function GET(request: NextRequest) {
   try {
 
-    // Proxy the request to Express backend
+    // Proxy the request to Node.js backend
     const backendResponse = await fetch(`${BACKEND_URL}/api/analytics/auditor`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': request.headers.get('Cookie') || ''
+        'X-User-Email': request.headers.get('X-User-Email') || ''
       },
     });
 

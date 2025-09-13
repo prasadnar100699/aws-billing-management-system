@@ -9,7 +9,5 @@ router.get('/', requireAuth, requirePermission('Invoices', 'view'), InvoicesCont
 router.get('/:id', requireAuth, requirePermission('Invoices', 'view'), InvoicesController.getInvoice);
 router.put('/:id', requireAuth, requirePermission('Invoices', 'edit'), InvoicesController.updateInvoice);
 router.delete('/:id', requireAuth, requirePermission('Invoices', 'delete'), InvoicesController.deleteInvoice);
-router.post('/:id/pdf', requireAuth, requirePermission('Invoices', 'edit'), InvoicesController.generatePDF);
-router.post('/:id/send', requireAuth, requirePermission('Invoices', 'edit'), InvoicesController.sendInvoice);
 
 module.exports = router;

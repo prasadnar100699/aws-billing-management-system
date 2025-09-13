@@ -1,16 +1,27 @@
 import axios from 'axios';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002/api';
+const API_BASE_URL = 'http://localhost:5002/api';
 
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  withCredentials: true, // Include session cookies
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Request interceptor to add user email header
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const userData = localStorage.getItem('user_data');
+    if (userData) {
+      const user = JSON.parse(userData);
+      config.headers['X-User-Email'] = user.email;
+    }
+  }
+  return config;
 });
 
 // Response interceptor for error handling
@@ -53,14 +64,18 @@ export const authApi = {
     fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', // Include session cookies
       body: JSON.stringify(credentials)
     }),
   
-  logout: () => fetch('/api/auth/logout', { 
-    method: 'POST',
-    credentials: 'include'
-  }),
+  logout: () => {
+    const userData = localStorage.getItem('user_data');
+    const userEmail = userData ? JSON.parse(userData).email : '';
+    
+    return fetch('/api/auth/logout', { 
+      method: 'POST',
+      headers: { 'X-User-Email': userEmail }
+    });
+  },
   
   getCurrentUser: () => {
     const userData = localStorage.getItem('user_data');
@@ -115,11 +130,32 @@ export const clientsApi = {
 
 // Analytics API
 export const analyticsApi = {
-  getSuperAdminAnalytics: () => fetch('/api/analytics/super-admin', { credentials: 'include' }).then(r => r.json()),
+  getSuperAdminAnalytics: () => {
+    const userData = localStorage.getItem('user_data');
+    const userEmail = userData ? JSON.parse(userData).email : '';
+    
+    return fetch('/api/analytics/super-admin', { 
+      headers: { 'X-User-Email': userEmail }
+    }).then(r => r.json());
+  },
   
-  getClientManagerAnalytics: () => fetch('/api/analytics/client-manager', { credentials: 'include' }).then(r => r.json()),
+  getClientManagerAnalytics: () => {
+    const userData = localStorage.getItem('user_data');
+    const userEmail = userData ? JSON.parse(userData).email : '';
+    
+    return fetch('/api/analytics/client-manager', { 
+      headers: { 'X-User-Email': userEmail }
+    }).then(r => r.json());
+  },
   
-  getAuditorAnalytics: () => fetch('/api/analytics/auditor', { credentials: 'include' }).then(r => r.json()),
+  getAuditorAnalytics: () => {
+    const userData = localStorage.getItem('user_data');
+    const userEmail = userData ? JSON.parse(userData).email : '';
+    
+    return fetch('/api/analytics/auditor', { 
+      headers: { 'X-User-Email': userEmail }
+    }).then(r => r.json());
+  },
   
   cacheAnalytics: () => api.post<ApiResponse>('/analytics/cache'),
   

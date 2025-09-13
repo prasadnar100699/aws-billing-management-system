@@ -1,64 +1,57 @@
-const { Client, ClientAwsMapping, User } = require('../models');
-const AuditService = require('../services/audit.service');
-const { success, error, paginated } = require('../utils/response');
-const { Op } = require('sequelize');
-const Joi = require('joi');
-
-// Validation schemas
-const createClientSchema = Joi.object({
-  client_name: Joi.string().required(),
-  contact_person: Joi.string().allow(''),
-  email: Joi.string().email().required(),
-  phone: Joi.string().allow(''),
-  aws_account_ids: Joi.array().items(Joi.string()),
-  gst_registered: Joi.boolean().default(false),
-  gst_number: Joi.string().allow(''),
-  billing_address: Joi.string().allow(''),
-  invoice_preferences: Joi.string().valid('monthly', 'quarterly', 'annually').default('monthly'),
-  default_currency: Joi.string().valid('USD', 'INR').default('USD'),
-  status: Joi.string().valid('active', 'inactive').default('active')
-});
+const { getMany, getOne, insert, update, deleteRecord } = require('../config/db');
 
 class ClientsController {
   async createClient(req, res) {
     try {
-      const { error: validationError, value } = createClientSchema.validate(req.body);
-      if (validationError) {
-        return error(res, validationError.details[0].message, 400);
+      const {
+        client_name,
+        contact_person,
+        email,
+        phone,
+        aws_account_ids,
+        gst_registered,
+        gst_number,
+        billing_address,
+        invoice_preferences,
+        default_currency,
+        status
+      } = req.body;
+
+      if (!client_name || !email) {
+        return res.status(400).json({ error: 'Client name and email are required' });
       }
 
       // Check if client already exists
-      const existingClient = await Client.findOne({ where: { email: value.email } });
+      const existingClient = await getOne('SELECT * FROM clients WHERE email = ?', [email]);
       if (existingClient) {
-        return error(res, 'Client with this email already exists', 409);
+        return res.status(409).json({ error: 'Client with this email already exists' });
       }
 
-      // Create client
-      const client = await Client.create(value);
+      // Prepare client data
+      const clientData = {
+        client_name,
+        contact_person: contact_person || null,
+        email,
+        phone: phone || null,
+        aws_account_ids: Array.isArray(aws_account_ids) ? JSON.stringify(aws_account_ids) : aws_account_ids,
+        gst_registered: gst_registered || false,
+        gst_number: gst_number || null,
+        billing_address: billing_address || null,
+        invoice_preferences: invoice_preferences || 'monthly',
+        default_currency: default_currency || 'USD',
+        status: status || 'active'
+      };
 
-      // Create AWS mappings if provided
-      if (value.aws_mappings && Array.isArray(value.aws_mappings)) {
-        for (const mapping of value.aws_mappings) {
-          await ClientAwsMapping.create({
-            client_id: client.client_id,
-            aws_account_id: mapping.aws_account_id,
-            billing_tag_key: mapping.billing_tag_key,
-            billing_tag_value: mapping.billing_tag_value
-          });
-        }
-      }
+      const clientId = await insert('clients', clientData);
 
-      // Assign client to current user if they're a Client Manager
-      if (req.user.role.role_name === 'Client Manager') {
-        await client.addAssignedManager(req.user);
-      }
-
-      await AuditService.logUserAction(req.user.user_id, 'create_client', `Created client: ${client.client_name}`, req);
-
-      success(res, { client }, 'Client created successfully', 201);
-    } catch (err) {
-      console.error('Create client error:', err);
-      error(res, 'Internal server error', 500);
+      res.status(201).json({
+        success: true,
+        message: 'Client created successfully',
+        data: { client: { client_id: clientId, ...clientData } }
+      });
+    } catch (error) {
+      console.error('Create client error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -70,50 +63,52 @@ class ClientsController {
       const status = req.query.status;
       const offset = (page - 1) * limit;
 
-      // Build where clause
-      const whereClause = {};
-      
+      let whereClause = '1=1';
+      let params = [];
+
       if (search) {
-        whereClause[Op.or] = [
-          { client_name: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } },
-          { contact_person: { [Op.like]: `%${search}%` } }
-        ];
+        whereClause += ' AND (client_name LIKE ? OR email LIKE ? OR contact_person LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
       }
 
       if (status) {
-        whereClause.status = status;
+        whereClause += ' AND status = ?';
+        params.push(status);
       }
 
-      // For Client Managers, only show assigned clients
-      let include = [];
-      if (req.user.role.role_name === 'Client Manager') {
-        include.push({
-          model: User,
-          as: 'assignedManagers',
-          where: { user_id: req.user.user_id },
-          required: true,
-          attributes: []
-        });
-      }
+      // Get total count
+      const countQuery = `SELECT COUNT(*) as total FROM clients WHERE ${whereClause}`;
+      const countResult = await getOne(countQuery, params);
+      const total = countResult.total;
 
-      const { count, rows } = await Client.findAndCountAll({
-        where: whereClause,
-        include,
-        limit,
-        offset,
-        order: [['client_name', 'ASC']]
-      });
+      // Get clients with pagination
+      const query = `
+        SELECT * FROM clients 
+        WHERE ${whereClause}
+        ORDER BY client_name ASC
+        LIMIT ? OFFSET ?
+      `;
+      const clients = await getMany(query, [...params, limit, offset]);
 
-      paginated(res, rows, {
-        total: count,
-        pages: Math.ceil(count / limit),
-        current_page: page,
-        per_page: limit
+      // Parse aws_account_ids JSON
+      const processedClients = clients.map(client => ({
+        ...client,
+        aws_account_ids: client.aws_account_ids ? JSON.parse(client.aws_account_ids) : []
+      }));
+
+      res.json({
+        success: true,
+        data: processedClients,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          current_page: page,
+          per_page: limit
+        }
       });
-    } catch (err) {
-      console.error('List clients error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('List clients error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -121,33 +116,31 @@ class ClientsController {
     try {
       const clientId = parseInt(req.params.id);
       
-      const client = await Client.findByPk(clientId, {
-        include: [
-          { model: ClientAwsMapping, as: 'awsMappings' },
-          { model: User, as: 'assignedManagers', attributes: ['user_id', 'username', 'email'] }
-        ]
-      });
+      const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
 
       if (!client) {
-        return error(res, 'Client not found', 404);
+        return res.status(404).json({ error: 'Client not found' });
       }
 
-      // Check if Client Manager has access to this client
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
+      // Parse aws_account_ids JSON
+      client.aws_account_ids = client.aws_account_ids ? JSON.parse(client.aws_account_ids) : [];
+
+      // Get AWS mappings
+      const awsMappings = await getMany(
+        'SELECT * FROM client_aws_mappings WHERE client_id = ?',
+        [clientId]
+      );
+
+      res.json({
+        success: true,
+        data: {
+          client,
+          aws_mappings: awsMappings
         }
-      }
-
-      success(res, {
-        client,
-        aws_mappings: client.awsMappings,
-        assigned_managers: client.assignedManagers
       });
-    } catch (err) {
-      console.error('Get client error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Get client error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -155,58 +148,38 @@ class ClientsController {
     try {
       const clientId = parseInt(req.params.id);
       
-      const client = await Client.findByPk(clientId, {
-        include: [{ model: User, as: 'assignedManagers' }]
-      });
-
+      const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
       if (!client) {
-        return error(res, 'Client not found', 404);
+        return res.status(404).json({ error: 'Client not found' });
       }
 
-      // Check if Client Manager has access to this client
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
-        }
-      }
-
-      // Validate email if changed
+      // Check if email is being changed and if it already exists
       if (req.body.email && req.body.email !== client.email) {
-        const existingClient = await Client.findOne({
-          where: { 
-            email: req.body.email,
-            client_id: { [Op.ne]: clientId }
-          }
-        });
+        const existingClient = await getOne(
+          'SELECT * FROM clients WHERE email = ? AND client_id != ?',
+          [req.body.email, clientId]
+        );
         if (existingClient) {
-          return error(res, 'Email already exists', 409);
+          return res.status(409).json({ error: 'Email already exists' });
         }
       }
 
-      // Update client
-      await client.update(req.body);
-
-      // Update AWS mappings if provided
-      if (req.body.aws_mappings) {
-        await ClientAwsMapping.destroy({ where: { client_id: clientId } });
-        
-        for (const mapping of req.body.aws_mappings) {
-          await ClientAwsMapping.create({
-            client_id: clientId,
-            aws_account_id: mapping.aws_account_id,
-            billing_tag_key: mapping.billing_tag_key,
-            billing_tag_value: mapping.billing_tag_value
-          });
-        }
+      // Prepare update data
+      const updateData = { ...req.body };
+      if (updateData.aws_account_ids && Array.isArray(updateData.aws_account_ids)) {
+        updateData.aws_account_ids = JSON.stringify(updateData.aws_account_ids);
       }
 
-      await AuditService.logUserAction(req.user.user_id, 'update_client', `Updated client: ${client.client_name}`, req);
+      await update('clients', updateData, 'client_id = ?', [clientId]);
 
-      success(res, { client }, 'Client updated successfully');
-    } catch (err) {
-      console.error('Update client error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'Client updated successfully',
+        data: { client: { ...client, ...updateData } }
+      });
+    } catch (error) {
+      console.error('Update client error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -214,27 +187,30 @@ class ClientsController {
     try {
       const clientId = parseInt(req.params.id);
       
-      const client = await Client.findByPk(clientId, {
-        include: [{ model: require('../models').Invoice, as: 'invoices' }]
-      });
-
+      const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
       if (!client) {
-        return error(res, 'Client not found', 404);
+        return res.status(404).json({ error: 'Client not found' });
       }
 
       // Check if client has invoices
-      if (client.invoices && client.invoices.length > 0) {
-        return error(res, 'Cannot delete client with existing invoices', 400);
+      const invoices = await getOne(
+        'SELECT COUNT(*) as count FROM invoices WHERE client_id = ?',
+        [clientId]
+      );
+      
+      if (invoices.count > 0) {
+        return res.status(400).json({ error: 'Cannot delete client with existing invoices' });
       }
 
-      await client.destroy();
+      await deleteRecord('clients', 'client_id = ?', [clientId]);
 
-      await AuditService.logUserAction(req.user.user_id, 'delete_client', `Deleted client: ${client.client_name}`, req);
-
-      success(res, null, 'Client deleted successfully');
-    } catch (err) {
-      console.error('Delete client error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'Client deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete client error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -242,32 +218,26 @@ class ClientsController {
     try {
       const clientId = parseInt(req.params.id);
       
-      const client = await Client.findByPk(clientId, {
-        include: [
-          { model: ClientAwsMapping, as: 'awsMappings' },
-          { model: User, as: 'assignedManagers' }
-        ]
-      });
-
+      const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
       if (!client) {
-        return error(res, 'Client not found', 404);
+        return res.status(404).json({ error: 'Client not found' });
       }
 
-      // Check if Client Manager has access to this client
-      if (req.user.role.role_name === 'Client Manager') {
-        const hasAccess = client.assignedManagers.some(manager => manager.user_id === req.user.user_id);
-        if (!hasAccess) {
-          return error(res, 'Access denied', 403);
+      const awsMappings = await getMany(
+        'SELECT * FROM client_aws_mappings WHERE client_id = ?',
+        [clientId]
+      );
+
+      res.json({
+        success: true,
+        data: {
+          aws_account_ids: client.aws_account_ids ? JSON.parse(client.aws_account_ids) : [],
+          aws_mappings: awsMappings
         }
-      }
-
-      success(res, {
-        aws_account_ids: client.aws_account_ids,
-        aws_mappings: client.awsMappings
       });
-    } catch (err) {
-      console.error('Get client AWS mappings error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Get client AWS mappings error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 }

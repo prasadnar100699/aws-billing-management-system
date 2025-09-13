@@ -1,37 +1,24 @@
-const { Client, Invoice, InvoiceLineItem, Service, User, UsageImport } = require('../models');
-const { success, error } = require('../utils/response');
-const { Op } = require('sequelize');
+const { getMany, getOne } = require('../config/db');
 
 class AnalyticsController {
   async getSuperAdminAnalytics(req, res) {
     try {
-      // Calculate date ranges
-      const today = new Date();
-      const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-
-      // Basic counts
-      const totalClients = await Client.count({ where: { status: 'active' } });
-      const totalUsers = await User.count({ where: { status: 'active' } });
-      const totalServices = await Service.count({ where: { status: 'active' } });
-      const totalInvoices = await Invoice.count({ where: { status: { [Op.ne]: 'draft' } } });
+      // Get basic counts
+      const totalClients = await getOne('SELECT COUNT(*) as count FROM clients WHERE status = "active"');
+      const totalUsers = await getOne('SELECT COUNT(*) as count FROM users WHERE status = "active"');
+      const totalServices = await getOne('SELECT COUNT(*) as count FROM services WHERE status = "active"');
+      const totalInvoices = await getOne('SELECT COUNT(*) as count FROM invoices WHERE status != "draft"');
 
       // Mock revenue data for demo
-      const revenueThisMonth = 67000;
-      const revenueLastMonth = 55000;
-      const revenueGrowth = 21.8;
-
-      // Mock analytics data
       const analyticsData = {
-        total_clients: totalClients,
-        total_users: totalUsers,
-        total_services: totalServices,
-        active_aws_accounts: 8, // Mock data
-        total_invoices: totalInvoices,
-        revenue_this_month: revenueThisMonth,
-        revenue_last_month: revenueLastMonth,
-        revenue_growth: revenueGrowth,
+        total_clients: totalClients.count,
+        total_users: totalUsers.count,
+        total_services: totalServices.count,
+        active_aws_accounts: 8,
+        total_invoices: totalInvoices.count,
+        revenue_this_month: 67000,
+        revenue_last_month: 55000,
+        revenue_growth: 21.8,
         revenue_trend: {
           labels: ['Jul 2024', 'Aug 2024', 'Sep 2024', 'Oct 2024', 'Nov 2024', 'Dec 2024'],
           data: [
@@ -71,16 +58,18 @@ class AnalyticsController {
         generated_at: new Date().toISOString()
       };
 
-      success(res, analyticsData);
-    } catch (err) {
-      console.error('Get super admin analytics error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        data: analyticsData
+      });
+    } catch (error) {
+      console.error('Get super admin analytics error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   async getClientManagerAnalytics(req, res) {
     try {
-      // Mock analytics data for Client Manager
       const analyticsData = {
         assigned_clients: 2,
         total_invoices: 8,
@@ -106,16 +95,18 @@ class AnalyticsController {
         generated_at: new Date().toISOString()
       };
 
-      success(res, analyticsData);
-    } catch (err) {
-      console.error('Get client manager analytics error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        data: analyticsData
+      });
+    } catch (error) {
+      console.error('Get client manager analytics error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   async getAuditorAnalytics(req, res) {
     try {
-      // Mock analytics data for Auditor
       const analyticsData = {
         total_clients: 3,
         total_invoices: 12,
@@ -149,10 +140,13 @@ class AnalyticsController {
         generated_at: new Date().toISOString()
       };
 
-      success(res, analyticsData);
-    } catch (err) {
-      console.error('Get auditor analytics error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        data: analyticsData
+      });
+    } catch (error) {
+      console.error('Get auditor analytics error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 }

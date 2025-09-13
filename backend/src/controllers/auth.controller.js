@@ -1,6 +1,35 @@
-const { User, Role, RoleModuleAccess } = require('../models');
-const AuditService = require('../services/audit.service');
-const { success, error } = require('../utils/response');
+const { getOne } = require('../config/db');
+
+// Hardcoded user credentials (no hashing)
+const USERS = [
+  {
+    user_id: 1,
+    username: 'admin',
+    email: 'admin@tejit.com',
+    password: 'Admin@123',
+    role_id: 1,
+    role_name: 'Super Admin',
+    status: 'active'
+  },
+  {
+    user_id: 2,
+    username: 'manager',
+    email: 'manager@tejit.com',
+    password: 'Manager@123',
+    role_id: 2,
+    role_name: 'Client Manager',
+    status: 'active'
+  },
+  {
+    user_id: 3,
+    username: 'auditor',
+    email: 'auditor@tejit.com',
+    password: 'Auditor@123',
+    role_id: 3,
+    role_name: 'Auditor',
+    status: 'active'
+  }
+];
 
 class AuthController {
   async login(req, res) {
@@ -8,103 +37,99 @@ class AuthController {
       const { email, password } = req.body;
 
       if (!email || !password) {
-        return error(res, 'Email and password are required', 400);
+        return res.status(400).json({ error: 'Email and password are required' });
       }
 
-      // Find user with role and permissions
-      const user = await User.findOne({
-        where: { email },
-        include: [{
-          model: Role,
-          as: 'role',
-          include: [{
-            model: RoleModuleAccess,
-            as: 'moduleAccess'
-          }]
-        }]
-      });
+      // Find user in hardcoded list
+      const user = USERS.find(u => u.email === email && u.password === password);
 
-      if (!user || !(await user.checkPassword(password))) {
-        await AuditService.logUserAction(null, 'login_failed', `Failed login attempt for ${email}`, req);
-        return error(res, 'Invalid email or password', 401);
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
       }
 
       if (user.status !== 'active') {
-        return error(res, 'Account is inactive', 401);
+        return res.status(401).json({ error: 'Account is inactive' });
       }
 
-      // Update last login
-      await user.update({ last_login: new Date() });
+      // Store user in session (simple approach)
+      req.session = { user };
 
-      // Create session
-      req.session.userId = user.user_id;
-      req.session.userEmail = user.email;
-      req.session.userRole = user.role.role_name;
-
-      await AuditService.logUserAction(user.user_id, 'login_success', 'User logged in successfully', req);
-
-      success(res, {
-        user_id: user.user_id,
-        username: user.username,
-        email: user.email,
-        role: user.role.role_name,
-        role_id: user.role_id,
-        status: user.status
-      }, 'Login successful');
-    } catch (err) {
-      console.error('Login error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user_id: user.user_id,
+          username: user.username,
+          email: user.email,
+          role: user.role_name,
+          role_id: user.role_id,
+          status: user.status
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   async logout(req, res) {
     try {
-      if (req.session) {
-        await AuditService.logUserAction(req.session.userId, 'logout', 'User logged out', req);
-        
-        req.session.destroy((err) => {
-          if (err) {
-            console.error('Session destroy error:', err);
-            return error(res, 'Logout failed', 500);
-          }
-          res.clearCookie('aws_billing_session');
-          success(res, null, 'Logged out successfully');
-        });
-      } else {
-        success(res, null, 'Logged out successfully');
-      }
-    } catch (err) {
-      console.error('Logout error:', err);
-      error(res, 'Internal server error', 500);
+      req.session = null;
+      res.json({
+        success: true,
+        message: 'Logged out successfully'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   async getCurrentUser(req, res) {
     try {
       if (!req.user) {
-        return error(res, 'User not found', 404);
+        return res.status(401).json({ error: 'User not found' });
       }
 
-      // Build permissions object
-      const permissions = {};
-      if (req.user.role && req.user.role.moduleAccess) {
-        req.user.role.moduleAccess.forEach(access => {
-          permissions[access.module_name] = {
-            can_view: access.can_view,
-            can_create: access.can_create,
-            can_edit: access.can_edit,
-            can_delete: access.can_delete
-          };
-        });
-      }
+      // Get user permissions from database
+      const permissions = await this.getUserPermissions(req.user.role_id);
 
-      success(res, {
-        user: req.user.toJSON(),
-        permissions
+      res.json({
+        success: true,
+        data: {
+          user: req.user,
+          permissions
+        }
       });
-    } catch (err) {
-      console.error('Get current user error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Get current user error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  async getUserPermissions(roleId) {
+    try {
+      const query = `
+        SELECT module_name, can_view, can_create, can_edit, can_delete
+        FROM role_module_access 
+        WHERE role_id = ?
+      `;
+      const permissions = await require('../config/db').getMany(query, [roleId]);
+      
+      const permissionsObj = {};
+      permissions.forEach(perm => {
+        permissionsObj[perm.module_name] = {
+          can_view: perm.can_view,
+          can_create: perm.can_create,
+          can_edit: perm.can_edit,
+          can_delete: perm.can_delete
+        };
+      });
+      
+      return permissionsObj;
+    } catch (error) {
+      console.error('Get permissions error:', error);
+      return {};
     }
   }
 }

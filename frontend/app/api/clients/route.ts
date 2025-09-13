@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
+const BACKEND_URL = 'http://localhost:5002';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,12 +12,12 @@ export async function GET(request: NextRequest) {
       params.append(key, value);
     });
 
-    // Proxy the request to Flask backend
+    // Proxy the request to Node.js backend
     const backendResponse = await fetch(`${BACKEND_URL}/api/clients?${params}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': request.headers.get('Cookie') || ''
+        'X-User-Email': request.headers.get('X-User-Email') || ''
       },
     });
 
@@ -44,12 +44,12 @@ export async function POST(request: NextRequest) {
   try {
     const clientData = await request.json();
 
-    // Proxy the request to Express backend
+    // Proxy the request to Node.js backend
     const backendResponse = await fetch(`${BACKEND_URL}/api/clients`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': request.headers.get('Cookie') || ''
+        'X-User-Email': request.headers.get('X-User-Email') || ''
       },
       body: JSON.stringify(clientData),
     });

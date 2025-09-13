@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
+const BACKEND_URL = 'http://localhost:5002';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,6 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': request.headers.get('Cookie') || ''
       },
       body: JSON.stringify({ email, password }),
     });
@@ -26,16 +25,7 @@ export async function POST(request: NextRequest) {
     const data = await backendResponse.json();
 
     if (backendResponse.ok) {
-      // Forward session cookies from backend
-      const response = NextResponse.json(data.data, { status: 200 });
-      
-      // Copy session cookies from backend response
-      const setCookieHeader = backendResponse.headers.get('set-cookie');
-      if (setCookieHeader) {
-        response.headers.set('set-cookie', setCookieHeader);
-      }
-      
-      return response;
+      return NextResponse.json(data.data, { status: 200 });
     } else {
       return NextResponse.json(
         { error: data.error || 'Login failed' },

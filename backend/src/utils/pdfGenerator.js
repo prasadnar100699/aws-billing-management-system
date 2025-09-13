@@ -1,17 +1,17 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const config = require('../config/env');
 
-class PDFService {
+class PDFGenerator {
   async generateInvoicePDF(invoice, client, lineItems) {
     try {
       const doc = new PDFDocument({ margin: 50 });
       const filename = `${invoice.invoice_number}.pdf`;
-      const filepath = path.join(config.UPLOAD_DIR, 'invoices', filename);
+      const uploadDir = process.env.UPLOAD_DIR || './uploads';
+      const filepath = path.join(uploadDir, 'invoices', filename);
 
       // Ensure directory exists
-      await require('fs').promises.mkdir(path.dirname(filepath), { recursive: true });
+      await fs.promises.mkdir(path.dirname(filepath), { recursive: true });
 
       // Pipe PDF to file
       doc.pipe(fs.createWriteStream(filepath));
@@ -26,8 +26,7 @@ class PDFService {
       this.addLineItemsTable(doc, lineItems);
       
       // Totals
-      const totals = await invoice.calculateTotals();
-      this.addTotals(doc, totals, invoice);
+      this.addTotals(doc, invoice);
       
       // Footer
       this.addFooter(doc);
@@ -52,16 +51,14 @@ class PDFService {
        .text('Tej IT Solutions', 50, 50)
        .fontSize(10)
        .text('AWS Client Billing & Management', 50, 75)
-       .text('Email: billing@tejit.com', 50, 90)
-       .text('Phone: +91-XXXXX-XXXXX', 50, 105);
+       .text('Email: billing@tejit.com', 50, 90);
 
     // Invoice title
     doc.fontSize(24)
        .text('INVOICE', 400, 50, { align: 'right' })
        .fontSize(12)
        .text(`Invoice #: ${invoice.invoice_number}`, 400, 80, { align: 'right' })
-       .text(`Date: ${new Date(invoice.invoice_date).toLocaleDateString()}`, 400, 95, { align: 'right' })
-       .text(`Due Date: ${new Date(invoice.due_date).toLocaleDateString()}`, 400, 110, { align: 'right' });
+       .text(`Date: ${new Date(invoice.invoice_date).toLocaleDateString()}`, 400, 95, { align: 'right' });
 
     // Line separator
     doc.moveTo(50, 140)
@@ -91,15 +88,6 @@ class PDFService {
     if (client.gst_registered && client.gst_number) {
       doc.text(`GST Number: ${client.gst_number}`, 50, yPosition + 120);
     }
-
-    // Invoice details
-    doc.fontSize(12)
-       .text(`Billing Period: ${new Date(invoice.billing_period_start || invoice.invoice_date).toLocaleDateString()} - ${new Date(invoice.billing_period_end || invoice.due_date).toLocaleDateString()}`, 300, yPosition + 20)
-       .text(`Currency: ${invoice.currency}`, 300, yPosition + 35);
-
-    if (invoice.usd_to_inr_rate) {
-      doc.text(`Exchange Rate: 1 USD = ${invoice.usd_to_inr_rate} INR`, 300, yPosition + 50);
-    }
   }
 
   addLineItemsTable(doc, lineItems) {
@@ -127,7 +115,7 @@ class PDFService {
 
     // Line items
     lineItems.forEach((item, index) => {
-      const amount = item.calculateAmount();
+      const amount = parseFloat(item.quantity) * parseFloat(item.rate) * (1 - parseFloat(item.discount || 0) / 100);
       
       doc.fontSize(10)
          .text((index + 1).toString(), itemCodeX, yPosition)
@@ -143,33 +131,26 @@ class PDFService {
     doc.moveTo(itemCodeX, yPosition)
        .lineTo(550, yPosition)
        .stroke();
-
-    return yPosition + 20;
   }
 
-  addTotals(doc, totals, invoice) {
+  addTotals(doc, invoice) {
     const totalsX = 400;
     let yPosition = 500;
 
     doc.fontSize(12)
        .text('Subtotal:', totalsX, yPosition)
-       .text(`${invoice.currency} ${totals.subtotal.toFixed(2)}`, totalsX + 100, yPosition, { align: 'right' });
+       .text(`${invoice.currency || 'USD'} ${invoice.subtotal || 0}`, totalsX + 100, yPosition, { align: 'right' });
 
-    if (totals.gst_amount > 0) {
+    if (invoice.gst_amount > 0) {
       yPosition += 20;
       doc.text('GST (18%):', totalsX, yPosition)
-         .text(`${invoice.currency} ${totals.gst_amount.toFixed(2)}`, totalsX + 100, yPosition, { align: 'right' });
+         .text(`${invoice.currency || 'USD'} ${invoice.gst_amount}`, totalsX + 100, yPosition, { align: 'right' });
     }
 
     yPosition += 20;
     doc.fontSize(14)
        .text('Total:', totalsX, yPosition)
-       .text(`${invoice.currency} ${totals.total.toFixed(2)}`, totalsX + 100, yPosition, { align: 'right' });
-
-    // Total line
-    doc.moveTo(totalsX, yPosition + 15)
-       .lineTo(550, yPosition + 15)
-       .stroke();
+       .text(`${invoice.currency || 'USD'} ${invoice.total_amount || 0}`, totalsX + 100, yPosition, { align: 'right' });
   }
 
   addFooter(doc) {
@@ -177,10 +158,8 @@ class PDFService {
     
     doc.fontSize(10)
        .text('Payment Terms: Net 30 days', 50, footerY)
-       .text('Thank you for your business!', 50, footerY + 15)
-       .text('For any queries, contact us at billing@tejit.com', 50, footerY + 30);
+       .text('Thank you for your business!', 50, footerY + 15);
 
-    // Company footer
     doc.text('Tej IT Solutions - AWS Client Billing & Management System', 50, footerY + 60, {
       align: 'center',
       width: 500
@@ -188,4 +167,4 @@ class PDFService {
   }
 }
 
-module.exports = new PDFService();
+module.exports = new PDFGenerator();

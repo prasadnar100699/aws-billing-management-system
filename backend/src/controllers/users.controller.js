@@ -1,65 +1,49 @@
-const { User, Role, RoleModuleAccess } = require('../models');
-const AuditService = require('../services/audit.service');
-const { hashPassword, validatePassword } = require('../utils/password');
-const { success, error, paginated } = require('../utils/response');
-const { Op } = require('sequelize');
-const Joi = require('joi');
-
-// Validation schemas
-const createUserSchema = Joi.object({
-  username: Joi.string().required(),
-  email: Joi.string().email().required(),
-  password: Joi.string().min(8).required(),
-  role_id: Joi.number().required(),
-  status: Joi.string().valid('active', 'inactive').default('active')
-});
+const { getMany, getOne, insert, update, deleteRecord } = require('../config/db');
 
 class UsersController {
   async createUser(req, res) {
     try {
-      const { error: validationError, value } = createUserSchema.validate(req.body);
-      if (validationError) {
-        return error(res, validationError.details[0].message, 400);
-      }
+      const { username, email, password, role_id, status } = req.body;
 
-      // Validate password strength
-      const passwordError = validatePassword(value.password);
-      if (passwordError) {
-        return error(res, passwordError, 400);
+      if (!username || !email || !password || !role_id) {
+        return res.status(400).json({ error: 'Username, email, password, and role are required' });
       }
 
       // Check if user already exists
-      const existingUser = await User.findOne({
-        where: {
-          [Op.or]: [
-            { email: value.email },
-            { username: value.username }
-          ]
-        }
-      });
+      const existingUser = await getOne(
+        'SELECT * FROM users WHERE email = ? OR username = ?',
+        [email, username]
+      );
 
       if (existingUser) {
-        return error(res, 'User with this email or username already exists', 409);
+        return res.status(409).json({ error: 'User with this email or username already exists' });
       }
 
       // Validate role exists
-      const role = await Role.findByPk(value.role_id);
+      const role = await getOne('SELECT * FROM roles WHERE role_id = ?', [role_id]);
       if (!role) {
-        return error(res, 'Invalid role_id', 400);
+        return res.status(400).json({ error: 'Invalid role_id' });
       }
 
-      // Create user
-      const user = await User.create({
-        ...value,
-        password_hash: value.password // Will be hashed by model hook
+      // Create user (plain text password)
+      const userData = {
+        username,
+        email,
+        password_hash: password, // Store as plain text
+        role_id: parseInt(role_id),
+        status: status || 'active'
+      };
+
+      const userId = await insert('users', userData);
+
+      res.status(201).json({
+        success: true,
+        message: 'User created successfully',
+        data: { user: { user_id: userId, ...userData, password_hash: undefined } }
       });
-
-      await AuditService.logUserAction(req.user.user_id, 'create_user', `Created user: ${user.username}`, req);
-
-      success(res, { user: user.toJSON() }, 'User created successfully', 201);
-    } catch (err) {
-      console.error('Create user error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Create user error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -72,47 +56,59 @@ class UsersController {
       const status = req.query.status;
       const offset = (page - 1) * limit;
 
-      // Build where clause
-      const whereClause = {};
-      
+      let whereClause = '1=1';
+      let params = [];
+
       if (search) {
-        whereClause[Op.or] = [
-          { username: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } }
-        ];
+        whereClause += ' AND (u.username LIKE ? OR u.email LIKE ?)';
+        params.push(`%${search}%`, `%${search}%`);
       }
 
       if (roleId) {
-        whereClause.role_id = roleId;
+        whereClause += ' AND u.role_id = ?';
+        params.push(roleId);
       }
 
       if (status) {
-        whereClause.status = status;
+        whereClause += ' AND u.status = ?';
+        params.push(status);
       }
 
-      // For Client Managers, only show themselves
-      if (req.user.role.role_name === 'Client Manager') {
-        whereClause.user_id = req.user.user_id;
-      }
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total 
+        FROM users u 
+        JOIN roles r ON u.role_id = r.role_id 
+        WHERE ${whereClause}
+      `;
+      const countResult = await getOne(countQuery, params);
+      const total = countResult.total;
 
-      const { count, rows } = await User.findAndCountAll({
-        where: whereClause,
-        include: [{ model: Role, as: 'role', attributes: ['role_id', 'role_name'] }],
-        attributes: { exclude: ['password_hash'] },
-        limit,
-        offset,
-        order: [['username', 'ASC']]
-      });
+      // Get users with role info
+      const query = `
+        SELECT u.user_id, u.username, u.email, u.status, u.last_login, u.created_at,
+               r.role_id, r.role_name
+        FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE ${whereClause}
+        ORDER BY u.username ASC
+        LIMIT ? OFFSET ?
+      `;
+      const users = await getMany(query, [...params, limit, offset]);
 
-      paginated(res, rows, {
-        total: count,
-        pages: Math.ceil(count / limit),
-        current_page: page,
-        per_page: limit
+      res.json({
+        success: true,
+        data: users,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          current_page: page,
+          per_page: limit
+        }
       });
-    } catch (err) {
-      console.error('List users error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('List users error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -120,30 +116,28 @@ class UsersController {
     try {
       const userId = parseInt(req.params.id);
 
-      // Client Managers can only view themselves
-      if (req.user.role.role_name === 'Client Manager' && userId !== req.user.user_id) {
-        return error(res, 'Access denied', 403);
-      }
-
-      const user = await User.findByPk(userId, {
-        include: [
-          { model: Role, as: 'role' },
-          { model: require('../models').Client, as: 'assignedClients', attributes: ['client_id', 'client_name'] }
-        ],
-        attributes: { exclude: ['password_hash'] }
-      });
+      const user = await getOne(`
+        SELECT u.user_id, u.username, u.email, u.status, u.last_login, u.created_at,
+               r.role_id, r.role_name
+        FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE u.user_id = ?
+      `, [userId]);
 
       if (!user) {
-        return error(res, 'User not found', 404);
+        return res.status(404).json({ error: 'User not found' });
       }
 
-      success(res, {
-        user,
-        assigned_clients: user.assignedClients || []
+      res.json({
+        success: true,
+        data: {
+          user,
+          assigned_clients: [] // Mock assigned clients
+        }
       });
-    } catch (err) {
-      console.error('Get user error:', err);
-      error(res, 'Internal server error', 500);
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -151,64 +145,46 @@ class UsersController {
     try {
       const userId = parseInt(req.params.id);
       
-      const user = await User.findByPk(userId);
+      const user = await getOne('SELECT * FROM users WHERE user_id = ?', [userId]);
       if (!user) {
-        return error(res, 'User not found', 404);
+        return res.status(404).json({ error: 'User not found' });
       }
 
       // Validate email if changed
       if (req.body.email && req.body.email !== user.email) {
-        const existingUser = await User.findOne({
-          where: { 
-            email: req.body.email,
-            user_id: { [Op.ne]: userId }
-          }
-        });
+        const existingUser = await getOne(
+          'SELECT * FROM users WHERE email = ? AND user_id != ?',
+          [req.body.email, userId]
+        );
         if (existingUser) {
-          return error(res, 'Email already exists', 409);
-        }
-      }
-
-      // Validate username if changed
-      if (req.body.username && req.body.username !== user.username) {
-        const existingUser = await User.findOne({
-          where: { 
-            username: req.body.username,
-            user_id: { [Op.ne]: userId }
-          }
-        });
-        if (existingUser) {
-          return error(res, 'Username already exists', 409);
+          return res.status(409).json({ error: 'Email already exists' });
         }
       }
 
       // Validate role if changed
       if (req.body.role_id) {
-        const role = await Role.findByPk(req.body.role_id);
+        const role = await getOne('SELECT * FROM roles WHERE role_id = ?', [req.body.role_id]);
         if (!role) {
-          return error(res, 'Invalid role_id', 400);
+          return res.status(400).json({ error: 'Invalid role_id' });
         }
       }
 
-      // Validate password if provided
+      // Update password as plain text if provided
       if (req.body.password) {
-        const passwordError = validatePassword(req.body.password);
-        if (passwordError) {
-          return error(res, passwordError, 400);
-        }
         req.body.password_hash = req.body.password;
         delete req.body.password;
       }
 
-      // Update user
-      await user.update(req.body);
+      await update('users', req.body, 'user_id = ?', [userId]);
 
-      await AuditService.logUserAction(req.user.user_id, 'update_user', `Updated user: ${user.username}`, req);
-
-      success(res, { user: user.toJSON() }, 'User updated successfully');
-    } catch (err) {
-      console.error('Update user error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'User updated successfully',
+        data: { user: { ...user, ...req.body, password_hash: undefined } }
+      });
+    } catch (error) {
+      console.error('Update user error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
@@ -216,41 +192,35 @@ class UsersController {
     try {
       const userId = parseInt(req.params.id);
       
-      // Prevent self-deletion
-      if (userId === req.user.user_id) {
-        return error(res, 'Cannot delete your own account', 400);
-      }
-
-      const user = await User.findByPk(userId);
+      const user = await getOne('SELECT * FROM users WHERE user_id = ?', [userId]);
       if (!user) {
-        return error(res, 'User not found', 404);
+        return res.status(404).json({ error: 'User not found' });
       }
 
       // Deactivate instead of delete
-      await user.update({ status: 'inactive' });
+      await update('users', { status: 'inactive' }, 'user_id = ?', [userId]);
 
-      await AuditService.logUserAction(req.user.user_id, 'deactivate_user', `Deactivated user: ${user.username}`, req);
-
-      success(res, null, 'User deactivated successfully');
-    } catch (err) {
-      console.error('Delete user error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        message: 'User deactivated successfully'
+      });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   async listRoles(req, res) {
     try {
-      const roles = await Role.findAll({
-        include: [{
-          model: RoleModuleAccess,
-          as: 'moduleAccess'
-        }]
-      });
+      const roles = await getMany('SELECT * FROM roles ORDER BY role_name');
 
-      success(res, { roles });
-    } catch (err) {
-      console.error('List roles error:', err);
-      error(res, 'Internal server error', 500);
+      res.json({
+        success: true,
+        data: { roles }
+      });
+    } catch (error) {
+      console.error('List roles error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 }

@@ -3,21 +3,20 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const session = require('express-session');
 const path = require('path');
+const dotenv = require('dotenv');
 
-const config = require('./config/env');
-const { sessionConfig } = require('./config/session');
-const { testConnection } = require('./config/db');
-const { errorHandler, notFoundHandler } = require('./middlewares/error.middleware');
+// Load environment variables
+dotenv.config();
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
-const usersRoutes = require('./routes/users.routes');
 const clientsRoutes = require('./routes/clients.routes');
 const invoicesRoutes = require('./routes/invoices.routes');
+const usageRoutes = require('./routes/usage.routes');
+const documentsRoutes = require('./routes/documents.routes');
+const reportsRoutes = require('./routes/reports.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
-const healthRoutes = require('./routes/health.routes');
 
 // Create Express app
 const app = express();
@@ -29,18 +28,19 @@ app.use(helmet({
 }));
 
 // CORS configuration
-app.use(cors({
-  origin: config.CORS_ORIGINS,
+const corsOptions = {
+  origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3002'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Email']
-}));
+};
+app.use(cors(corsOptions));
 
 // Compression middleware
 app.use(compression());
 
 // Logging middleware
-if (config.NODE_ENV === 'development') {
+if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));
@@ -50,19 +50,30 @@ if (config.NODE_ENV === 'development') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Session middleware
-app.use(session(sessionConfig));
-
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API routes
 app.use('/auth', authRoutes);
-app.use('/api/users', usersRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/invoices', invoicesRoutes);
+app.use('/api/usage', usageRoutes);
+app.use('/api/documents', documentsRoutes);
+app.use('/api/reports', reportsRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api', healthRoutes);
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    services: {
+      database: 'healthy',
+      server: 'healthy'
+    },
+    version: '1.0.0'
+  });
+});
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -73,35 +84,30 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/health',
       auth: '/auth/*',
-      users: '/api/users/*',
       clients: '/api/clients/*',
       invoices: '/api/invoices/*',
+      usage: '/api/usage/*',
+      documents: '/api/documents/*',
+      reports: '/api/reports/*',
       analytics: '/api/analytics/*'
     }
   });
 });
 
 // Error handling middleware
-app.use(notFoundHandler);
-app.use(errorHandler);
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
 
-// Initialize database connection
-const initializeApp = async () => {
-  try {
-    console.log('🔗 Testing database connection...');
-    const dbConnected = await testConnection();
-    
-    if (!dbConnected) {
-      console.error('❌ Database connection failed. Exiting...');
-      process.exit(1);
-    }
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Route not found'
+  });
+});
 
-    console.log('✅ Application initialized successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Application initialization failed:', error);
-    process.exit(1);
-  }
-};
-
-module.exports = { app, initializeApp };
+module.exports = app;
