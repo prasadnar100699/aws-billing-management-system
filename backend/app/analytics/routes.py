@@ -1,32 +1,17 @@
 from flask import request, jsonify, current_app
-from flask_login import login_required, current_user
 from app.analytics import bp
 from app.models import Client, Invoice, InvoiceLineItem, Service, User, UsageImport
-from app import db, redis_client
+from app import db
 from app.utils.auth import require_permission
 from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
 import json
 
 @bp.route('/super-admin', methods=['GET'])
-@login_required
 @require_permission('analytics', 'view')
 def get_super_admin_analytics():
     """Get analytics data for Super Admin dashboard"""
     try:
-        # Only Super Admins can access this
-        if current_user.role.role_name != 'Super Admin':
-            return jsonify({'error': 'Access denied'}), 403
-        
-        # Check cache first
-        cache_key = 'analytics_super_admin'
-        try:
-            cached_data = redis_client.get(cache_key)
-            if cached_data:
-                return jsonify(json.loads(cached_data)), 200
-        except:
-            pass  # Continue without cache
-        
         # Calculate date ranges
         today = datetime.utcnow().date()
         this_month_start = today.replace(day=1)
@@ -101,12 +86,6 @@ def get_super_admin_analytics():
             'generated_at': datetime.utcnow().isoformat()
         }
         
-        # Cache for 15 minutes
-        try:
-            redis_client.setex(cache_key, 900, json.dumps(analytics_data))
-        except:
-            pass  # Continue without cache
-        
         return jsonify(analytics_data), 200
         
     except Exception as e:
@@ -114,15 +93,10 @@ def get_super_admin_analytics():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/client-manager', methods=['GET'])
-@login_required
 @require_permission('analytics', 'view')
 def get_client_manager_analytics():
     """Get analytics data for Client Manager dashboard"""
     try:
-        # Only Client Managers can access this
-        if current_user.role.role_name != 'Client Manager':
-            return jsonify({'error': 'Access denied'}), 403
-        
         # Mock analytics data for Client Manager
         analytics_data = {
             'assigned_clients': 2,
@@ -156,15 +130,10 @@ def get_client_manager_analytics():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/auditor', methods=['GET'])
-@login_required
 @require_permission('analytics', 'view')
 def get_auditor_analytics():
     """Get analytics data for Auditor dashboard"""
     try:
-        # Only Auditors can access this
-        if current_user.role.role_name != 'Auditor':
-            return jsonify({'error': 'Access denied'}), 403
-        
         # Mock analytics data for Auditor
         analytics_data = {
             'total_clients': 3,

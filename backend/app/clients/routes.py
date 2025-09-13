@@ -1,20 +1,22 @@
 from flask import request, jsonify, current_app
-from flask_login import login_required, current_user
 from app.clients import bp
 from app.models import Client, ClientAwsMapping, user_client_mappings
 from app import db
-from app.utils.auth import require_permission
+from app.utils.auth import require_permission, get_current_user
 from app.utils.audit import log_user_action
 from app.utils.validation import validate_email, validate_gst_number
 from sqlalchemy import or_
 import re
 
 @bp.route('/', methods=['POST'])
-@login_required
 @require_permission('Clients', 'create')
 def create_client():
     """Create a new client"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         data = request.get_json()
         
         # Validate required fields

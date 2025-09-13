@@ -1,6 +1,6 @@
 from flask import jsonify
 from app.health import bp
-from app import db, redis_client
+from app import db
 from datetime import datetime
 
 @bp.route('/health', methods=['GET'])
@@ -13,19 +13,11 @@ def health_check():
     except Exception as e:
         db_status = f'unhealthy: {str(e)}'
 
-    # Check Redis connection
-    try:
-        redis_client.ping()
-        redis_status = 'healthy'
-    except Exception as e:
-        redis_status = f'unhealthy: {str(e)}'
-
     health_data = {
-        'status': 'healthy' if db_status == 'healthy' and redis_status == 'healthy' else 'unhealthy',
+        'status': 'healthy' if db_status == 'healthy' else 'unhealthy',
         'timestamp': datetime.utcnow().isoformat(),
         'services': {
-            'database': db_status,
-            'redis': redis_status
+            'database': db_status
         },
         'version': '1.0.0'
     }

@@ -22,7 +22,6 @@ import {
   Cloud,
   DollarSign
 } from 'lucide-react';
-import axios from 'axios';
 
 interface DemoCredential {
   role: string;
@@ -43,8 +42,8 @@ export default function LoginPage() {
 
   // Check if user is already logged in
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
+    const userData = localStorage.getItem('user_data');
+    if (userData) {
       router.push('/dashboard');
     }
     
@@ -53,41 +52,33 @@ export default function LoginPage() {
   }, [router]);
 
   const loadDemoCredentials = async () => {
-    try {
-      const response = await axios.get('/api/auth/demo-credentials');
-      if (response.data?.credentials) {
-        setDemoCredentials(response.data.credentials);
+    // Set demo credentials
+    setDemoCredentials([
+      {
+        role: 'Super Admin',
+        email: 'admin@tejit.com',
+        password: 'password',
+        description: 'Full system access',
+        icon: 'Shield',
+        color: 'bg-blue-500'
+      },
+      {
+        role: 'Client Manager',
+        email: 'manager@tejit.com',
+        password: 'password',
+        description: 'Manage clients & invoices',
+        icon: 'Users',
+        color: 'bg-green-500'
+      },
+      {
+        role: 'Auditor',
+        email: 'auditor@tejit.com',
+        password: 'password',
+        description: 'Reports & analytics',
+        icon: 'BarChart3',
+        color: 'bg-purple-500'
       }
-    } catch (error) {
-      console.error('Failed to load demo credentials:', error);
-      // Fallback demo credentials
-      setDemoCredentials([
-        {
-          role: 'Super Admin',
-          email: 'admin@tejit.com',
-          password: 'password123',
-          description: 'Full system access',
-          icon: 'Shield',
-          color: 'bg-blue-500'
-        },
-        {
-          role: 'Client Manager',
-          email: 'manager@tejit.com',
-          password: 'password123',
-          description: 'Manage clients & invoices',
-          icon: 'Users',
-          color: 'bg-green-500'
-        },
-        {
-          role: 'Auditor',
-          email: 'auditor@tejit.com',
-          password: 'password123',
-          description: 'Reports & analytics',
-          icon: 'BarChart3',
-          color: 'bg-purple-500'
-        }
-      ]);
-    }
+    ]);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -101,23 +92,31 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('/api/auth/login', {
-        email,
-        password
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password
+        })
       });
 
-      if (response.data) {
+      const data = await response.json();
+
+      if (response.ok) {
         // Store auth data
-        localStorage.setItem('auth_token', response.data.token);
-        localStorage.setItem('user_data', JSON.stringify(response.data));
+        localStorage.setItem('user_data', JSON.stringify(data));
         
         toast.success('Login successful!');
         router.push('/dashboard');
+      } else {
+        toast.error(data.error || 'Login failed');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      const errorMessage = error.response?.data?.error || 'Login failed. Please try again.';
-      toast.error(errorMessage);
+      toast.error('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

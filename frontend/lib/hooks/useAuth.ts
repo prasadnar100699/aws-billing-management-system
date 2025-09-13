@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 
 interface User {
   user_id: number;
@@ -23,10 +22,9 @@ export function useAuth() {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
       const userData = localStorage.getItem('user_data');
       
-      if (!token || !userData) {
+      if (!userData) {
         setLoading(false);
         return;
       }
@@ -41,7 +39,6 @@ export function useAuth() {
       
     } catch (error) {
       console.error('Auth check error:', error);
-      localStorage.removeItem('auth_token');
       localStorage.removeItem('user_data');
     } finally {
       setLoading(false);
@@ -50,24 +47,33 @@ export function useAuth() {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post('/api/auth/login', {
-        email,
-        password
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password
+        })
       });
 
-      if (response.data) {
+      const data = await response.json();
+
+      if (response.ok) {
         // Store auth data
-        localStorage.setItem('auth_token', response.data.token);
-        localStorage.setItem('user_data', JSON.stringify(response.data));
+        localStorage.setItem('user_data', JSON.stringify(data));
         
-        setUser(response.data);
+        setUser(data);
         
         // Set permissions
-        const rolePermissions = getRolePermissions(response.data.role_name);
+        const rolePermissions = getRolePermissions(data.role);
         setPermissions(rolePermissions);
         
         router.push('/dashboard');
-        return response.data;
+        return data;
+      } else {
+        throw new Error(data.error || 'Login failed');
       }
     } catch (error) {
       throw error;
@@ -76,7 +82,41 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      localStorage.removeItem('auth_token');
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+        email,
+        password
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store auth data
+        localStorage.setItem('user_data', JSON.stringify(data));
+        
+        setUser(data);
+        
+        // Set permissions
+        const rolePermissions = getRolePermissions(data.role);
+        setPermissions(rolePermissions);
+        
+        router.push('/dashboard');
+        return data;
+      } else {
+        throw new Error(data.error || 'Login failed');
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
       localStorage.removeItem('user_data');
       setUser(null);
       setPermissions({});

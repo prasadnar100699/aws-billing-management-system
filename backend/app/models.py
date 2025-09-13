@@ -1,5 +1,4 @@
-from app import db, login_manager
-from flask_login import UserMixin
+from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
@@ -117,7 +116,7 @@ class RoleModuleAccess(db.Model):
 # ===========================
 # USER & AUDIT
 # ===========================
-class User(UserMixin, db.Model):
+class User(db.Model):
     __tablename__ = 'users'
 
     user_id = db.Column(db.Integer, primary_key=True)
@@ -132,9 +131,6 @@ class User(UserMixin, db.Model):
 
     # Relationships
     assigned_clients = db.relationship('Client', secondary=user_client_mappings, back_populates='assigned_managers')
-
-    def get_id(self):
-        return str(self.user_id)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

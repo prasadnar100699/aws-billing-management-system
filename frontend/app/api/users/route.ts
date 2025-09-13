@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 
 // Mock database - Replace with actual database connection
 let users = [
@@ -10,7 +6,7 @@ let users = [
     user_id: 1,
     username: 'admin',
     email: 'admin@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 1,
     role_name: 'Super Admin',
     status: 'active',
@@ -20,7 +16,7 @@ let users = [
     user_id: 2,
     username: 'manager',
     email: 'manager@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 2,
     role_name: 'Client Manager',
     status: 'active',
@@ -30,7 +26,7 @@ let users = [
     user_id: 3,
     username: 'auditor',
     email: 'auditor@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 3,
     role_name: 'Auditor',
     status: 'active',
@@ -38,31 +34,25 @@ let users = [
   }
 ];
 
-function verifyToken(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
+function getCurrentUser(request: NextRequest) {
+  const userEmail = request.headers.get('X-User-Email');
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!userEmail) {
     return null;
   }
 
-  const token = authHeader.split(' ')[1];
-  
-  try {
-    return jwt.verify(token, JWT_SECRET) as any;
-  } catch (error) {
-    return null;
-  }
+  return users.find(u => u.email === userEmail);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Only Super Admin can list users
-    if (decoded.role_name !== 'Super Admin') {
+    if (currentUser.role_name !== 'Super Admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -98,8 +88,8 @@ export async function GET(request: NextRequest) {
     const endIndex = startIndex + limit;
     const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
 
-    // Remove password hashes from response
-    const safeUsers = paginatedUsers.map(({ password_hash, ...user }) => user);
+    // Remove passwords from response
+    const safeUsers = paginatedUsers.map(({ password, ...user }) => user);
 
     return NextResponse.json({
       users: safeUsers,
@@ -117,13 +107,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Only Super Admin can create users
-    if (decoded.role_name !== 'Super Admin') {
+    if (currentUser.role_name !== 'Super Admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -145,9 +135,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
-    const password_hash = await bcrypt.hash(userData.password, 10);
-
     // Get role name
     const roleNames = {
       1: 'Super Admin',
@@ -160,7 +147,7 @@ export async function POST(request: NextRequest) {
       user_id: Math.max(...users.map(u => u.user_id)) + 1,
       username: userData.username,
       email: userData.email,
-      password_hash,
+      password: userData.password,
       role_id: parseInt(userData.role_id),
       role_name: roleNames[userData.role_id as keyof typeof roleNames] || 'User',
       status: userData.status || 'active',
@@ -169,8 +156,8 @@ export async function POST(request: NextRequest) {
 
     users.push(newUser);
 
-    // Remove password hash from response
-    const { password_hash: _, ...safeUser } = newUser;
+    // Remove password from response
+    const { password: _, ...safeUser } = newUser;
 
     return NextResponse.json({
       message: 'User created successfully',

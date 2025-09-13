@@ -1,35 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
+// Mock users database
+const users = [
+  {
+    user_id: 1,
+    username: 'admin',
+    email: 'admin@tejit.com',
+    role_name: 'Super Admin',
+    status: 'active'
+  },
+  {
+    user_id: 2,
+    username: 'manager',
+    email: 'manager@tejit.com',
+    role_name: 'Client Manager',
+    status: 'active'
+  },
+  {
+    user_id: 3,
+    username: 'auditor',
+    email: 'auditor@tejit.com',
+    role_name: 'Auditor',
+    status: 'active'
+  }
+];
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
+    const userEmail = request.headers.get('X-User-Email');
     
-    if (!authHeader) {
+    if (!userEmail) {
       return NextResponse.json(
-        { error: 'Authorization header required' },
+        { error: 'User email required' },
         { status: 401 }
       );
     }
 
-    // Proxy the request to Flask backend
-    const backendResponse = await fetch(`${BACKEND_URL}/auth/me`, {
-      method: 'GET',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Find user in mock database
+    const user = users.find(u => u.email === userEmail);
 
-    const data = await backendResponse.json();
-
-    if (backendResponse.ok) {
-      return NextResponse.json(data, { status: 200 });
+    if (user) {
+      // Mock permissions based on role
+      const permissions = getRolePermissions(user.role_name);
+      
+      return NextResponse.json({
+        user: user,
+        permissions: permissions
+      }, { status: 200 });
     } else {
       return NextResponse.json(
-        { error: data.error || 'Authentication failed' },
-        { status: backendResponse.status }
+        { error: 'User not found' },
+        { status: 404 }
       );
     }
   } catch (error) {
@@ -39,4 +60,43 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function getRolePermissions(roleName: string) {
+  const permissions: any = {
+    'Super Admin': {
+      dashboard: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      clients: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      users: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      roles: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      services: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      invoices: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      usage_import: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      documents: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      reports: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      notifications: { can_view: true, can_create: true, can_edit: true, can_delete: true }
+    },
+    'Client Manager': {
+      dashboard: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      clients: { can_view: true, can_create: true, can_edit: true, can_delete: false },
+      services: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      invoices: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      usage_import: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      documents: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+      reports: { can_view: true, can_create: true, can_edit: false, can_delete: false },
+      notifications: { can_view: true, can_create: false, can_edit: false, can_delete: false }
+    },
+    'Auditor': {
+      dashboard: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      clients: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      services: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      invoices: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      usage_import: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      documents: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+      reports: { can_view: true, can_create: true, can_edit: false, can_delete: false },
+      notifications: { can_view: true, can_create: false, can_edit: false, can_delete: false }
+    }
+  };
+  
+  return permissions[roleName] || {};
 }

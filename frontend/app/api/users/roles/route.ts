@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 
 // Mock roles data
 const roles = [
@@ -51,26 +48,27 @@ const roles = [
   }
 ];
 
-function verifyToken(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
+function getCurrentUser(request: NextRequest) {
+  const userEmail = request.headers.get('X-User-Email');
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!userEmail) {
     return null;
   }
 
-  const token = authHeader.split(' ')[1];
+  // Mock user lookup
+  const users = [
+    { email: 'admin@tejit.com', role_name: 'Super Admin' },
+    { email: 'manager@tejit.com', role_name: 'Client Manager' },
+    { email: 'auditor@tejit.com', role_name: 'Auditor' }
+  ];
   
-  try {
-    return jwt.verify(token, JWT_SECRET) as any;
-  } catch (error) {
-    return null;
-  }
+  return users.find(u => u.email === userEmail);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

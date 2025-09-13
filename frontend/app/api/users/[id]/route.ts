@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 
 // Mock database - Replace with actual database connection
 let users = [
@@ -10,7 +6,7 @@ let users = [
     user_id: 1,
     username: 'admin',
     email: 'admin@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 1,
     role_name: 'Super Admin',
     status: 'active',
@@ -20,7 +16,7 @@ let users = [
     user_id: 2,
     username: 'manager',
     email: 'manager@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 2,
     role_name: 'Client Manager',
     status: 'active',
@@ -30,7 +26,7 @@ let users = [
     user_id: 3,
     username: 'auditor',
     email: 'auditor@tejit.com',
-    password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    password: 'password',
     role_id: 3,
     role_name: 'Auditor',
     status: 'active',
@@ -38,20 +34,14 @@ let users = [
   }
 ];
 
-function verifyToken(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
+function getCurrentUser(request: NextRequest) {
+  const userEmail = request.headers.get('X-User-Email');
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!userEmail) {
     return null;
   }
 
-  const token = authHeader.split(' ')[1];
-  
-  try {
-    return jwt.verify(token, JWT_SECRET) as any;
-  } catch (error) {
-    return null;
-  }
+  return users.find(u => u.email === userEmail);
 }
 
 export async function GET(
@@ -59,8 +49,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -71,13 +61,13 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only Super Admin can view other users, users can view themselves
-    if (decoded.role_name !== 'Super Admin' && decoded.user_id !== userId) {
+    // Only Super Admin can view other users
+    if (currentUser.role_name !== 'Super Admin' && currentUser.user_id !== userId) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Remove password hash from response
-    const { password_hash, ...safeUser } = user;
+    // Remove password from response
+    const { password, ...safeUser } = user;
 
     return NextResponse.json({
       user: safeUser,
@@ -95,8 +85,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -108,7 +98,7 @@ export async function PUT(
     }
 
     // Only Super Admin can update users
-    if (decoded.role_name !== 'Super Admin') {
+    if (currentUser.role_name !== 'Super Admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -131,11 +121,11 @@ export async function PUT(
     }
 
     if (updateData.password) {
-      user.password_hash = await bcrypt.hash(updateData.password, 10);
+      user.password = updateData.password;
     }
 
-    // Remove password hash from response
-    const { password_hash, ...safeUser } = user;
+    // Remove password from response
+    const { password, ...safeUser } = user;
 
     return NextResponse.json({
       message: 'User updated successfully',
@@ -153,20 +143,20 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const decoded = verifyToken(request);
-    if (!decoded) {
+    const currentUser = getCurrentUser(request);
+    if (!currentUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Only Super Admin can delete users
-    if (decoded.role_name !== 'Super Admin') {
+    if (currentUser.role_name !== 'Super Admin') {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     const userId = parseInt(params.id);
     
     // Prevent self-deletion
-    if (decoded.user_id === userId) {
+    if (currentUser.user_id === userId) {
       return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 });
     }
 

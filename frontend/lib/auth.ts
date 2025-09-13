@@ -1,5 +1,3 @@
-import { authApi } from './api';
-
 export interface User {
   user_id: number;
   username: string;
@@ -7,12 +5,6 @@ export interface User {
   role_name: string;
   role_id: number;
   status: string;
-}
-
-export interface AuthResponse {
-  user: User;
-  token: string;
-  expires_in: number;
 }
 
 export class AuthService {
@@ -25,40 +17,45 @@ export class AuthService {
     return AuthService.instance;
   }
 
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string): Promise<User> {
     try {
-      const response = await authApi.login({ email, password });
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
       
-      const authData = response.data;
-      if (authData) {
-        const user = {
+      const authData = await response.json();
+      
+      if (response.ok) {
+        const user: User = {
           user_id: authData.user_id,
           username: authData.username,
           email: authData.email,
-          role_name: authData.role_name,
+          role_name: authData.role,
           role_id: authData.role_id,
-          status: authData.status || 'active'
+          status: authData.status
         };
         
         // Store auth data
         if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', authData.token);
           localStorage.setItem('user_data', JSON.stringify(user));
-          localStorage.setItem('token_expires', (Date.now() + authData.expires_in * 1000).toString());
         }
         
-        return { user, token: authData.token, expires_in: authData.expires_in };
+        return user;
       }
       
       throw new Error('Invalid response format');
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || 'Login failed');
+      throw new Error(error.message || 'Login failed');
     }
   }
 
   async logout(): Promise<void> {
     try {
-      await authApi.logout();
+      await fetch('/api/auth/logout', { method: 'POST' });
     } catch (error) {
       // Continue with logout even if API call fails
     } finally {
@@ -66,44 +63,12 @@ export class AuthService {
     }
   }
 
-  async getCurrentUser(): Promise<{ user: User; permissions: any } | null> {
-    try {
-      const response = await authApi.getCurrentUser();
-      return response.data || null;
-    } catch (error) {
-      this.clearAuthData();
-      return null;
-    }
-  }
-
-  async refreshToken(): Promise<string | null> {
-    try {
-      const response = await authApi.refreshToken();
-      
-      if (response.data?.token) {
-        localStorage.setItem('auth_token', response.data.token);
-        localStorage.setItem('token_expires', (Date.now() + response.data.expires_in * 1000).toString());
-        return response.data.token;
-      }
-      
-      return null;
-    } catch (error) {
-      this.clearAuthData();
-      return null;
-    }
-  }
-
   isAuthenticated(): boolean {
     if (typeof window === 'undefined') return false;
     
-    const token = localStorage.getItem('auth_token');
-    const expires = localStorage.getItem('token_expires');
+    const userData = localStorage.getItem('user_data');
     
-    if (!token || !expires) {
-      return false;
-    }
-    
-    return Date.now() < parseInt(expires);
+    return !!userData;
   }
 
   getUser(): User | null {
@@ -111,12 +76,6 @@ export class AuthService {
     
     const userData = localStorage.getItem('user_data');
     return userData ? JSON.parse(userData) : null;
-  }
-
-  getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    
-    return localStorage.getItem('auth_token');
   }
 
   hasPermission(module: string, action: string): boolean {
@@ -163,9 +122,7 @@ export class AuthService {
   private clearAuthData(): void {
     if (typeof window === 'undefined') return;
     
-    localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
-    localStorage.removeItem('token_expires');
   }
 }
 

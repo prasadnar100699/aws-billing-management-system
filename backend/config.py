@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from urllib.parse import quote_plus
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
@@ -15,9 +14,7 @@ class Config:
     DB_USER = os.environ.get('DB_USER') or 'admin'
     DB_PASSWORD = os.environ.get('DB_PASSWORD') or 'admin@9955'
    
-    # Encode password for special chars
-    ENCODED_DB_PASSWORD = quote_plus(DB_PASSWORD)
-    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DB_USER}:{ENCODED_DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_pre_ping': True,
@@ -25,13 +22,6 @@ class Config:
         'pool_timeout': 20,
         'max_overflow': 0
     }
-   
-    # Redis configuration
-    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379/0'
-   
-    # JWT configuration
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'your-super-secret-jwt-key-aws-billing-2024'
-    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES') or 86400)
    
     # Upload configuration
     UPLOAD_DIR = os.environ.get('UPLOAD_DIR') or './uploads'

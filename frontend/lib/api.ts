@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -12,13 +12,14 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add user email
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+      const userData = localStorage.getItem('user_data');
+      if (userData) {
+        const user = JSON.parse(userData);
+        config.headers['X-User-Email'] = user.email;
       }
     }
     return config;
@@ -34,7 +35,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
         localStorage.removeItem('user_data');
         window.location.href = '/';
       }
@@ -66,15 +66,18 @@ export interface PaginatedResponse<T> {
 // Authentication API
 export const authApi = {
   login: (credentials: { email: string; password: string }) =>
-    api.post<any>('/auth/login', credentials),
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials)
+    }),
   
-  logout: () => api.post<ApiResponse>('/auth/logout'),
+  logout: () => fetch('/api/auth/logout', { method: 'POST' }),
   
-  getCurrentUser: () => api.get<ApiResponse<{ user: any; permissions: any }>>('/auth/me'),
-  
-  refreshToken: () => api.post<ApiResponse<{ token: string }>>('/auth/refresh'),
-  
-  verifyToken: () => api.post<ApiResponse<{ valid: boolean; user: any }>>('/auth/verify')
+  getCurrentUser: () => {
+    const userData = localStorage.getItem('user_data');
+    return userData ? JSON.parse(userData) : null;
+  }
 };
 
 // Users API

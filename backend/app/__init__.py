@@ -1,19 +1,13 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
 from flask_cors import CORS
 from flask_migrate import Migrate
 from config import Config
-import redis
 import os
 
-# Initialize extensions (no circular imports)
+# Initialize extensions
 db = SQLAlchemy()
-login_manager = LoginManager()
 migrate = Migrate()
-
-# Initialize Redis client
-redis_client = None
 
 def create_app():
     app = Flask(__name__)
@@ -23,25 +17,7 @@ def create_app():
    
     # Initialize extensions
     db.init_app(app)
-    login_manager.init_app(app)
     migrate.init_app(app, db)
-   
-    # Initialize Redis
-    global redis_client
-    try:
-        redis_client = redis.from_url(app.config['REDIS_URL'])
-        redis_client.ping()  # Test connection
-        print("✅ Redis connected successfully")
-    except Exception as e:
-        print(f"⚠️  Redis connection failed: {e}")
-        # Create a mock Redis client for development
-        class MockRedis:
-            def get(self, key): return None
-            def set(self, key, value): return True
-            def setex(self, key, time, value): return True
-            def delete(self, key): return True
-            def ping(self): return True
-        redis_client = MockRedis()
    
     # Configure CORS
     cors_origins = app.config['CORS_ORIGINS'].split(',')
@@ -179,9 +155,3 @@ def seed_initial_data():
    
     db.session.commit()
     print("✅ Initial data seeded successfully!")
-
-# User loader for Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    from app.models import User
-    return User.query.get(int(user_id))
