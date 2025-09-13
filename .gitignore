@@ -56,3 +56,4 @@ frontend/next-env.d.ts
 
 # Docker configuration (if any)
 .docker
+.env
