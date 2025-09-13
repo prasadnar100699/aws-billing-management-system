@@ -1,24 +1,24 @@
 from flask import request, jsonify, current_app, send_file
-from flask_login import login_required, current_user
 from app.reports import bp
 from app.models import Client, Invoice, InvoiceLineItem, Service, PricingComponent
-from app import db, redis_client
-from app.utils.auth import require_permission
+from app import db
+from app.utils.auth import require_permission, get_current_user
 from app.utils.audit import log_user_action
-from app.tasks.report_generator import generate_report_export
 from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
-import json
 import tempfile
 import csv
 import io
 
 @bp.route('/clients', methods=['POST'])
-@login_required
 @require_permission('Reports', 'create')
 def generate_client_report():
     """Generate client revenue report"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         data = request.get_json()
         
         # Validate date range
@@ -67,18 +67,13 @@ def generate_client_report():
                 'avg_invoice_amount': float(result.avg_invoice_amount or 0)
             })
         
-        # Cache report
-        cache_key = f"client_report_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}_{client_id or 'all'}"
-        redis_client.setex(cache_key, 3600, json.dumps(report_data))  # Cache for 1 hour
-        
         log_user_action(current_user.user_id, 'generate_client_report', 
                        f"Generated client report for {start_date} to {end_date}")
         
         return jsonify({
             'report_data': report_data,
             'date_range': data['date_range'],
-            'generated_at': datetime.utcnow().isoformat(),
-            'cache_key': cache_key
+            'generated_at': datetime.utcnow().isoformat()
         }), 200
         
     except Exception as e:
@@ -86,13 +81,10 @@ def generate_client_report():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/clients', methods=['GET'])
-@login_required
 @require_permission('Reports', 'view')
 def list_client_reports():
     """List cached client reports"""
     try:
-        # This would typically list cached reports from Redis
-        # For now, return empty list
         return jsonify({'reports': []}), 200
         
     except Exception as e:

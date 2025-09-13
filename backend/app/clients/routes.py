@@ -89,11 +89,14 @@ def create_client():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/', methods=['GET'])
-@login_required
 @require_permission('Clients', 'view')
 def list_clients():
     """List clients with pagination and filtering"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 10, type=int)
         sort = request.args.get('sort', 'client_name')
@@ -145,11 +148,14 @@ def list_clients():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>', methods=['GET'])
-@login_required
 @require_permission('Clients', 'view')
 def get_client(client_id):
     """Get client details"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         
         # Check if Client Manager has access to this client
@@ -168,11 +174,14 @@ def get_client(client_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>', methods=['PUT'])
-@login_required
 @require_permission('Clients', 'edit')
 def update_client(client_id):
     """Update client details"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         
         # Check if Client Manager has access to this client
@@ -253,11 +262,14 @@ def update_client(client_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>', methods=['DELETE'])
-@login_required
 @require_permission('Clients', 'delete')
 def delete_client(client_id):
     """Delete client (Super Admin only)"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         
         # Check if client has invoices
@@ -277,11 +289,14 @@ def delete_client(client_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>/aws', methods=['GET'])
-@login_required
 @require_permission('Clients', 'view')
 def get_client_aws_mappings(client_id):
     """Get AWS account mappings for a client"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         
         # Check if Client Manager has access to this client
@@ -299,11 +314,14 @@ def get_client_aws_mappings(client_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>/assign', methods=['POST'])
-@login_required
 @require_permission('Clients', 'edit')
 def assign_client_manager(client_id):
     """Assign client to a manager (Super Admin only)"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         data = request.get_json()
         
@@ -334,11 +352,14 @@ def assign_client_manager(client_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:client_id>/unassign', methods=['POST'])
-@login_required
 @require_permission('Clients', 'edit')
 def unassign_client_manager(client_id):
     """Unassign client from a manager (Super Admin only)"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         client = Client.query.get_or_404(client_id)
         data = request.get_json()
         

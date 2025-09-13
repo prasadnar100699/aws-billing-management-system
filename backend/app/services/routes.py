@@ -1,19 +1,21 @@
 from flask import request, jsonify, current_app
-from flask_login import login_required, current_user
 from app.services import bp
 from app.models import Service, ServiceCategory, PricingComponent
-from app import db, redis_client
+from app import db
 from app.utils.auth import require_permission
 from app.utils.audit import log_user_action
 from sqlalchemy import or_
-import json
 
 @bp.route('/categories', methods=['POST'])
-@login_required
 @require_permission('Services', 'create')
 def create_category():
     """Create a new service category (Super Admin only)"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         data = request.get_json()
         
         if not data.get('category_name'):
@@ -31,9 +33,6 @@ def create_category():
         db.session.add(category)
         db.session.commit()
         
-        # Clear cache
-        redis_client.delete('service_categories')
-        
         log_user_action(current_user.user_id, 'create_category', f"Created category: {category.category_name}")
         
         return jsonify({
@@ -47,21 +46,12 @@ def create_category():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/categories', methods=['GET'])
-@login_required
 @require_permission('Services', 'view')
 def list_categories():
     """List all service categories"""
     try:
-        # Try to get from cache first
-        cached_categories = redis_client.get('service_categories')
-        if cached_categories:
-            return jsonify({'categories': json.loads(cached_categories)}), 200
-        
         categories = ServiceCategory.query.all()
         categories_data = [category.to_dict() for category in categories]
-        
-        # Cache for 1 hour
-        redis_client.setex('service_categories', 3600, json.dumps(categories_data))
         
         return jsonify({'categories': categories_data}), 200
         
@@ -70,11 +60,15 @@ def list_categories():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/', methods=['POST'])
-@login_required
 @require_permission('Services', 'create')
 def create_service():
     """Create a new service (Super Admin only)"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         data = request.get_json()
         
         # Validate required fields
@@ -123,9 +117,6 @@ def create_service():
         
         db.session.commit()
         
-        # Clear cache
-        redis_client.delete('services_catalog')
-        
         log_user_action(current_user.user_id, 'create_service', f"Created service: {service.service_name}")
         
         return jsonify({
@@ -139,7 +130,6 @@ def create_service():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/', methods=['GET'])
-@login_required
 @require_permission('Services', 'view')
 def list_services():
     """List services with pagination and filtering"""
@@ -150,12 +140,6 @@ def list_services():
         search = request.args.get('search', '')
         category_id = request.args.get('category_id', type=int)
         status = request.args.get('status')
-        
-        # Try to get from cache for simple requests
-        cache_key = f"services_{page}_{limit}_{sort}_{search}_{category_id}_{status}"
-        cached_services = redis_client.get(cache_key)
-        if cached_services and not search:  # Don't cache search results
-            return jsonify(json.loads(cached_services)), 200
         
         # Build query
         query = Service.query
@@ -197,10 +181,6 @@ def list_services():
             'per_page': limit
         }
         
-        # Cache for 30 minutes if no search
-        if not search:
-            redis_client.setex(cache_key, 1800, json.dumps(result))
-        
         return jsonify(result), 200
         
     except Exception as e:
@@ -208,7 +188,6 @@ def list_services():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:service_id>', methods=['GET'])
-@login_required
 @require_permission('Services', 'view')
 def get_service(service_id):
     """Get service details with pricing components"""
@@ -224,11 +203,15 @@ def get_service(service_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:service_id>', methods=['PUT'])
-@login_required
 @require_permission('Services', 'edit')
 def update_service(service_id):
     """Update service details"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         service = Service.query.get_or_404(service_id)
         data = request.get_json()
         
@@ -249,10 +232,6 @@ def update_service(service_id):
         
         db.session.commit()
         
-        # Clear cache
-        redis_client.delete('services_catalog')
-        redis_client.delete(f'services_*')  # Clear all service cache keys
-        
         log_user_action(current_user.user_id, 'update_service', f"Updated service: {service.service_name}")
         
         return jsonify({
@@ -266,11 +245,15 @@ def update_service(service_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:service_id>', methods=['DELETE'])
-@login_required
 @require_permission('Services', 'delete')
 def delete_service(service_id):
     """Delete service if not used in any invoices"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         service = Service.query.get_or_404(service_id)
         
         # Check if service is used in any invoice line items
@@ -280,10 +263,6 @@ def delete_service(service_id):
         
         db.session.delete(service)
         db.session.commit()
-        
-        # Clear cache
-        redis_client.delete('services_catalog')
-        redis_client.delete(f'services_*')
         
         log_user_action(current_user.user_id, 'delete_service', f"Deleted service: {service.service_name}")
         
@@ -296,11 +275,15 @@ def delete_service(service_id):
 
 # Pricing Components endpoints
 @bp.route('/<int:service_id>/components', methods=['POST'])
-@login_required
 @require_permission('Services', 'create')
 def create_pricing_component(service_id):
     """Add pricing component to service"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         service = Service.query.get_or_404(service_id)
         data = request.get_json()
         
@@ -327,9 +310,6 @@ def create_pricing_component(service_id):
         db.session.add(component)
         db.session.commit()
         
-        # Clear cache
-        redis_client.delete('services_catalog')
-        
         log_user_action(current_user.user_id, 'create_component', 
                        f"Created component: {component.component_name} for service: {service.service_name}")
         
@@ -344,7 +324,6 @@ def create_pricing_component(service_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:service_id>/components', methods=['GET'])
-@login_required
 @require_permission('Services', 'view')
 def list_pricing_components(service_id):
     """List pricing components for a service"""
@@ -362,7 +341,6 @@ def list_pricing_components(service_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/components/<int:component_id>', methods=['GET'])
-@login_required
 @require_permission('Services', 'view')
 def get_pricing_component(component_id):
     """Get pricing component details"""
@@ -378,11 +356,15 @@ def get_pricing_component(component_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/components/<int:component_id>', methods=['PUT'])
-@login_required
 @require_permission('Services', 'edit')
 def update_pricing_component(component_id):
     """Update pricing component"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         component = PricingComponent.query.get_or_404(component_id)
         data = request.get_json()
         
@@ -406,9 +388,6 @@ def update_pricing_component(component_id):
         
         db.session.commit()
         
-        # Clear cache
-        redis_client.delete('services_catalog')
-        
         log_user_action(current_user.user_id, 'update_component', 
                        f"Updated component: {component.component_name}")
         
@@ -423,11 +402,15 @@ def update_pricing_component(component_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/components/<int:component_id>', methods=['DELETE'])
-@login_required
 @require_permission('Services', 'delete')
 def delete_pricing_component(component_id):
     """Delete pricing component if not used"""
     try:
+        from app.utils.auth import get_current_user
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         component = PricingComponent.query.get_or_404(component_id)
         
         # Check if component is used in any invoice line items
@@ -436,9 +419,6 @@ def delete_pricing_component(component_id):
         
         db.session.delete(component)
         db.session.commit()
-        
-        # Clear cache
-        redis_client.delete('services_catalog')
         
         log_user_action(current_user.user_id, 'delete_component', 
                        f"Deleted component: {component.component_name}")

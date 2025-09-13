@@ -1,10 +1,9 @@
 from flask import request, jsonify, current_app, send_file
-from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app.documents import bp
 from app.models import Document, Client, Invoice
 from app import db
-from app.utils.auth import require_permission
+from app.utils.auth import require_permission, get_current_user
 from app.utils.audit import log_user_action
 from app.utils.validation import validate_file_extension, validate_file_size, sanitize_filename
 from sqlalchemy import or_
@@ -14,11 +13,14 @@ from datetime import datetime
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'png', 'jpg', 'jpeg'}
 
 @bp.route('/', methods=['POST'])
-@login_required
 @require_permission('Documents', 'create')
 def upload_document():
     """Upload a document"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         # Check if file is present
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -106,11 +108,14 @@ def upload_document():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/', methods=['GET'])
-@login_required
 @require_permission('Documents', 'view')
 def list_documents():
     """List documents with pagination and filtering"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 10, type=int)
         sort = request.args.get('sort', 'upload_date')
@@ -174,11 +179,14 @@ def list_documents():
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:document_id>', methods=['GET'])
-@login_required
 @require_permission('Documents', 'view')
 def download_document(document_id):
     """Download a document"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         document = Document.query.get_or_404(document_id)
         
         # Check access for Client Managers
@@ -208,11 +216,14 @@ def download_document(document_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:document_id>/info', methods=['GET'])
-@login_required
 @require_permission('Documents', 'view')
 def get_document_info(document_id):
     """Get document information without downloading"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         document = Document.query.get_or_404(document_id)
         
         # Check access for Client Managers
@@ -233,11 +244,14 @@ def get_document_info(document_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/<int:document_id>', methods=['DELETE'])
-@login_required
 @require_permission('Documents', 'delete')
 def delete_document(document_id):
     """Delete a document"""
     try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+            
         document = Document.query.get_or_404(document_id)
         
         # Check access for Client Managers
@@ -271,7 +285,6 @@ def delete_document(document_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/types', methods=['GET'])
-@login_required
 @require_permission('Documents', 'view')
 def get_document_types():
     """Get available document types"""
