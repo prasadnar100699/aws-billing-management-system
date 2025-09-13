@@ -31,18 +31,3 @@ def log_user_action(user_id, action, details=None, ip_address=None, user_agent=N
         # Don't let audit logging break the main functionality
         db.session.rollback()
         print(f"Audit logging error: {str(e)}")
-
-def get_audit_logs(user_id=None, action=None, limit=100, offset=0):
-    """Get audit logs with optional filtering"""
-    query = AuditLog.query
-    
-    if user_id:
-        query = query.filter(AuditLog.user_id == user_id)
-    
-    if action:
-        query = query.filter(AuditLog.action.contains(action))
-    
-    query = query.order_by(AuditLog.timestamp.desc())
-    query = query.offset(offset).limit(limit)
-    
-    return query.all()

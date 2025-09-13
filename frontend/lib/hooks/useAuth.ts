@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authService, User } from '../auth';
+import axios from 'axios';
+
+interface User {
+  user_id: number;
+  username: string;
+  email: string;
+  role_name: string;
+  role_id: number;
+  status: string;
+}
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -14,20 +23,26 @@ export function useAuth() {
 
   const checkAuth = async () => {
     try {
-      if (!authService.isAuthenticated()) {
+      const token = localStorage.getItem('auth_token');
+      const userData = localStorage.getItem('user_data');
+      
+      if (!token || !userData) {
         setLoading(false);
         return;
       }
 
-      const userData = await authService.getCurrentUser();
-      if (userData) {
-        setUser(userData.user);
-        setPermissions(userData.permissions);
-      } else {
-        router.push('/');
-      }
+      // Parse stored user data
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+      
+      // Set basic permissions based on role
+      const rolePermissions = getRolePermissions(parsedUser.role_name);
+      setPermissions(rolePermissions);
+      
     } catch (error) {
-      router.push('/');
+      console.error('Auth check error:', error);
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
     } finally {
       setLoading(false);
     }
@@ -35,17 +50,25 @@ export function useAuth() {
 
   const login = async (email: string, password: string) => {
     try {
-      const authData = await authService.login(email, password);
-      setUser(authData.user);
-      
-      // Get permissions after login
-      const userData = await authService.getCurrentUser();
-      if (userData) {
-        setPermissions(userData.permissions);
+      const response = await axios.post('/api/auth/login', {
+        email,
+        password
+      });
+
+      if (response.data) {
+        // Store auth data
+        localStorage.setItem('auth_token', response.data.token);
+        localStorage.setItem('user_data', JSON.stringify(response.data));
+        
+        setUser(response.data);
+        
+        // Set permissions
+        const rolePermissions = getRolePermissions(response.data.role_name);
+        setPermissions(rolePermissions);
+        
+        router.push('/dashboard');
+        return response.data;
       }
-      
-      router.push('/dashboard');
-      return authData;
     } catch (error) {
       throw error;
     }
@@ -53,15 +76,13 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      await authService.logout();
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
       setUser(null);
       setPermissions({});
       router.push('/');
     } catch (error) {
-      // Continue with logout even if API call fails
-      setUser(null);
-      setPermissions({});
-      router.push('/');
+      console.error('Logout error:', error);
     }
   };
 
@@ -72,6 +93,45 @@ export function useAuth() {
     if (user.role_name === 'Super Admin') return true;
     
     return permissions[module]?.[`can_${action}`] || false;
+  };
+
+  const getRolePermissions = (roleName: string) => {
+    const permissions: any = {
+      'Super Admin': {
+        dashboard: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        clients: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        users: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        roles: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        services: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        invoices: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        usage_import: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        documents: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        reports: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        notifications: { can_view: true, can_create: true, can_edit: true, can_delete: true }
+      },
+      'Client Manager': {
+        dashboard: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        clients: { can_view: true, can_create: true, can_edit: true, can_delete: false },
+        services: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        invoices: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        usage_import: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        documents: { can_view: true, can_create: true, can_edit: true, can_delete: true },
+        reports: { can_view: true, can_create: true, can_edit: false, can_delete: false },
+        notifications: { can_view: true, can_create: false, can_edit: false, can_delete: false }
+      },
+      'Auditor': {
+        dashboard: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        clients: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        services: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        invoices: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        usage_import: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        documents: { can_view: true, can_create: false, can_edit: false, can_delete: false },
+        reports: { can_view: true, can_create: true, can_edit: false, can_delete: false },
+        notifications: { can_view: true, can_create: false, can_edit: false, can_delete: false }
+      }
+    };
+    
+    return permissions[roleName] || {};
   };
 
   return {

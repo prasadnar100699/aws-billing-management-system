@@ -2,17 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5002';
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json();
-    
     // Proxy request to Flask backend
-    const response = await fetch(`${BACKEND_URL}/auth/login`, {
-      method: 'POST',
+    const response = await fetch(`${BACKEND_URL}/auth/demo-credentials`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
     });
 
     const data = await response.json();
@@ -24,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Login proxy error:', error);
+    console.error('Demo credentials proxy error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

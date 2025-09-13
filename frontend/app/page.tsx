@@ -22,12 +22,23 @@ import {
   Cloud,
   DollarSign
 } from 'lucide-react';
+import axios from 'axios';
+
+interface DemoCredential {
+  role: string;
+  email: string;
+  password: string;
+  description: string;
+  icon: string;
+  color: string;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [demoCredentials, setDemoCredentials] = useState<DemoCredential[]>([]);
   const router = useRouter();
 
   // Check if user is already logged in
@@ -36,7 +47,48 @@ export default function LoginPage() {
     if (token) {
       router.push('/dashboard');
     }
+    
+    // Load demo credentials
+    loadDemoCredentials();
   }, [router]);
+
+  const loadDemoCredentials = async () => {
+    try {
+      const response = await axios.get('/api/auth/demo-credentials');
+      if (response.data?.credentials) {
+        setDemoCredentials(response.data.credentials);
+      }
+    } catch (error) {
+      console.error('Failed to load demo credentials:', error);
+      // Fallback demo credentials
+      setDemoCredentials([
+        {
+          role: 'Super Admin',
+          email: 'admin@tejit.com',
+          password: 'password123',
+          description: 'Full system access',
+          icon: 'Shield',
+          color: 'bg-blue-500'
+        },
+        {
+          role: 'Client Manager',
+          email: 'manager@tejit.com',
+          password: 'password123',
+          description: 'Manage clients & invoices',
+          icon: 'Users',
+          color: 'bg-green-500'
+        },
+        {
+          role: 'Auditor',
+          email: 'auditor@tejit.com',
+          password: 'password123',
+          description: 'Reports & analytics',
+          icon: 'BarChart3',
+          color: 'bg-purple-500'
+        }
+      ]);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,60 +101,36 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
+      const response = await axios.post('/api/auth/login', {
+        email,
+        password
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.data) {
         // Store auth data
-        localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('user_data', JSON.stringify(data));
+        localStorage.setItem('auth_token', response.data.token);
+        localStorage.setItem('user_data', JSON.stringify(response.data));
         
         toast.success('Login successful!');
         router.push('/dashboard');
-      } else {
-        toast.error(data.error || 'Login failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      toast.error('Login failed. Please try again.');
+      const errorMessage = error.response?.data?.error || 'Login failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const demoCredentials = [
-    {
-      role: 'Super Admin',
-      email: 'admin@tejit.com',
-      password: 'Admin@123',
-      description: 'Full system access',
-      icon: Shield,
-      color: 'bg-blue-500'
-    },
-    {
-      role: 'Client Manager',
-      email: 'manager@tejit.com',
-      password: 'Manager@123',
-      description: 'Manage clients & invoices',
-      icon: Users,
-      color: 'bg-green-500'
-    },
-    {
-      role: 'Auditor',
-      email: 'auditor@tejit.com',
-      password: 'Auditor@123',
-      description: 'Reports & analytics',
-      icon: BarChart3,
-      color: 'bg-purple-500'
-    }
-  ];
+  const getIconComponent = (iconName: string) => {
+    const icons: any = {
+      Shield,
+      Users,
+      BarChart3
+    };
+    return icons[iconName] || Shield;
+  };
 
   const features = [
     {
@@ -271,66 +299,51 @@ export default function LoginPage() {
                 </form>
 
                 {/* Demo Credentials */}
-                <div className="space-y-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-4 bg-white text-gray-500">Demo Credentials</span>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3">
-                    {demoCredentials.map((cred, index) => (
-                      <div
-                        key={index}
-                        onClick={() => {
-                          setEmail(cred.email);
-                          setPassword(cred.password);
-                        }}
-                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all duration-200 group"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-8 h-8 ${cred.color} rounded-lg flex items-center justify-center`}>
-                            <cred.icon className="w-4 h-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900 text-sm">{cred.role}</p>
-                            <p className="text-xs text-gray-600">{cred.description}</p>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500">
-                      Click any role above to auto-fill credentials
-                    </p>
-                  </div>
-
-                  {/* Signup Link */}
-                  <div className="text-center">
+                {demoCredentials.length > 0 && (
+                  <div className="space-y-4">
                     <div className="relative">
                       <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-gray-200"></div>
                       </div>
                       <div className="relative flex justify-center text-sm">
-                        <span className="px-4 bg-white text-gray-500">New to the platform?</span>
+                        <span className="px-4 bg-white text-gray-500">Demo Credentials</span>
                       </div>
                     </div>
-                    
-                    <Button 
-                      variant="ghost" 
-                      className="mt-4 w-full"
-                      onClick={() => router.push('/signup')}
-                    >
-                      Create New Account
-                    </Button>
+
+                    <div className="grid gap-3">
+                      {demoCredentials.map((cred, index) => {
+                        const IconComponent = getIconComponent(cred.icon);
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => {
+                              setEmail(cred.email);
+                              setPassword(cred.password);
+                            }}
+                            className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all duration-200 group"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className={`w-8 h-8 ${cred.color} rounded-lg flex items-center justify-center`}>
+                                <IconComponent className="w-4 h-4 text-white" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">{cred.role}</p>
+                                <p className="text-xs text-gray-600">{cred.description}</p>
+                              </div>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">
+                        Click any role above to auto-fill credentials
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
