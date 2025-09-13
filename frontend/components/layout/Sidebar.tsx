@@ -149,19 +149,21 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
   return (
     <div className={cn(
-      "bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-300",
+      "bg-white/90 backdrop-blur-md border-r border-gray-200/50 flex flex-col h-screen transition-all duration-300 shadow-lg",
       isCollapsed ? "w-16" : "w-64"
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200/50">
         {!isCollapsed && (
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-gray-900 text-sm">Tej IT Solutions</h2>
-              <p className="text-xs text-gray-500">AWS Billing</p>
+              <h2 className="font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent text-sm">
+                Tej IT Solutions
+              </h2>
+              <p className="text-xs text-gray-500">AWS Billing System</p>
             </div>
           </div>
         )}
@@ -180,12 +182,12 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
       {/* User Info */}
       {user && (
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50/50 to-purple-50/50">
           <div className={cn(
             "flex items-center space-x-3",
             isCollapsed && "justify-center"
           )}>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg ring-2 ring-blue-100">
               <span className="text-white text-sm font-semibold">
                 {user.username.charAt(0).toUpperCase()}
               </span>
@@ -197,7 +199,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 </p>
                 <div className="flex items-center space-x-1 mt-1">
                   {getRoleIcon(user.role_name)}
-                  <Badge className={cn("text-xs", getRoleBadgeColor(user.role_name))}>
+                  <Badge className={cn("text-xs shadow-sm", getRoleBadgeColor(user.role_name))}>
                     {user.role_name}
                   </Badge>
                 </div>
@@ -221,7 +223,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                   className={cn(
                     "w-full justify-start text-left font-normal",
                     isCollapsed && "px-2",
-                    isActive && "bg-blue-50 text-blue-700 border-blue-200"
+                    isActive && "bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-blue-200 shadow-sm"
                   )}
                   onClick={() => {
                     setCurrentPath(item.path);
@@ -231,10 +233,10 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                   <Icon className={cn(
                     "w-4 h-4",
                     !isCollapsed && "mr-3",
-                    isActive && "text-blue-600"
+                    isActive && "text-blue-600 drop-shadow-sm"
                   )} />
                   {!isCollapsed && (
-                    <span className={cn(isActive && "text-blue-700")}>
+                    <span className={cn(isActive && "text-blue-700 font-medium")}>
                       {item.title}
                     </span>
                   )}
@@ -246,12 +248,12 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* Logout */}
-      <div className="p-2 border-t border-gray-200">
+      <div className="p-2 border-t border-gray-200/50">
         <Button
           variant="ghost"
           onClick={handleLogout}
           className={cn(
-            "w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50",
+            "w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200",
             isCollapsed && "px-2"
           )}
         >

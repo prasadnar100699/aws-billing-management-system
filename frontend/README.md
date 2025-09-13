@@ -2,6 +2,104 @@
 
 A comprehensive billing and client management system specifically designed for AWS service providers, built with Next.js, Python, and MySQL.
 
+## 🔐 Authentication & Authorization
+
+### Role-based Access Control
+
+The system implements a comprehensive role-based access control (RBAC) system:
+
+#### Super Admin
+- Full system access
+- User and role management
+- System configuration
+- All client and invoice operations
+
+#### Client Manager
+- Assigned client management
+- Invoice generation and management
+- Usage data import
+- Limited reporting access
+
+#### Auditor
+- Read-only access to all data
+- Advanced reporting capabilities
+- Dashboard analytics access
+- No modification permissions
+
+### Session Management
+- JWT-based authentication
+- 24-hour token expiration
+- Secure password hashing
+- Role-based route protection
+
+## 💼 Core Workflows
+
+### Client Onboarding
+1. Create client with AWS account details
+2. Configure GST settings and billing preferences
+3. Map multiple AWS accounts if required
+4. Set up recurring invoice templates
+
+### Invoice Generation
+1. **Manual Creation**: Select client, add services, calculate totals
+2. **Usage Import**: Upload AWS CUR CSV, auto-generate line items
+3. **Recurring**: Automated generation based on templates
+4. **Approval Workflow**: Draft → Review → Approve → Send
+
+### AWS Usage Import
+1. Upload AWS Cost and Usage Report (CUR) CSV
+2. Validate data format and AWS account mapping
+3. Process records and map to service catalog
+4. Generate draft invoices automatically
+5. Handle errors and provide detailed logs
+
+### Document Management
+1. Upload supporting documents (usage reports, contracts)
+2. Associate with clients or invoices
+3. Secure access control based on user roles
+4. Version tracking and audit trails
+
+## 📊 Analytics & Reporting
+
+### Dashboard Metrics
+- **Financial KPIs**: Revenue trends, monthly growth
+- **Client Insights**: Top clients, service distribution
+- **Operational Metrics**: Invoice status, import success rates
+- **AWS Analytics**: Service usage patterns, account distribution
+
+### Available Reports
+- **Client Revenue Reports**: Monthly/quarterly breakdowns
+- **Service Usage Analysis**: AWS service consumption patterns
+- **GST Compliance Reports**: Tax calculation summaries
+- **Aging Reports**: Outstanding invoice tracking
+
+### Export Options
+- CSV and Excel formats
+- PDF reports with charts
+- Scheduled report generation
+- Email delivery of reports
+
+## 🔧 Configuration Options
+
+### Invoice Customization
+- Company branding and logo
+- Invoice number format configuration
+- GST rate settings
+- Payment terms and conditions
+- Multi-language support (English/Hindi)
+
+### AWS Integration Settings
+- Service code mapping
+- Pricing component configuration
+- Currency conversion settings
+- Usage aggregation rules
+
+### Notification Preferences
+- Email templates customization
+- Notification frequency settings
+- Alert thresholds configuration
+- Automated reminder scheduling
+
 ## 🚀 Features
 
 ### Core Modules
@@ -133,6 +231,8 @@ npm run worker
 ### 5. Access the Application
 
 - **Application**: http://localhost:3000
+- **Frontend**: http://localhost:3002
+- **Backend API**: http://localhost:5002
 - **Default Credentials**:
   - Super Admin: `admin@tejit.com` / `password123`
   - Client Manager: `manager@tejit.com` / `password123`
