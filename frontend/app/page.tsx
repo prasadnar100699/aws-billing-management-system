@@ -57,7 +57,7 @@ export default function LoginPage() {
       {
         role: 'Super Admin',
         email: 'admin@tejit.com',
-        password: 'Admin@123',
+        password: 'password',
         description: 'Full system access',
         icon: 'Shield',
         color: 'bg-blue-500'
@@ -65,7 +65,7 @@ export default function LoginPage() {
       {
         role: 'Client Manager',
         email: 'manager@tejit.com',
-        password: 'Manager@123',
+        password: 'password',
         description: 'Manage clients & invoices',
         icon: 'Users',
         color: 'bg-green-500'
@@ -73,7 +73,7 @@ export default function LoginPage() {
       {
         role: 'Auditor',
         email: 'auditor@tejit.com',
-        password: 'Auditor@123',
+        password: 'password',
         description: 'Reports & analytics',
         icon: 'BarChart3',
         color: 'bg-purple-500'

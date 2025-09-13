@@ -6,7 +6,7 @@ const USERS = [
     user_id: 1,
     username: 'admin',
     email: 'admin@tejit.com',
-    password: 'Admin@123',
+    password: 'password',
     role_id: 1,
     role_name: 'Super Admin',
     status: 'active'
@@ -15,7 +15,7 @@ const USERS = [
     user_id: 2,
     username: 'manager',
     email: 'manager@tejit.com',
-    password: 'Manager@123',
+    password: 'password',
     role_id: 2,
     role_name: 'Client Manager',
     status: 'active'
@@ -24,7 +24,7 @@ const USERS = [
     user_id: 3,
     username: 'auditor',
     email: 'auditor@tejit.com',
-    password: 'Auditor@123',
+    password: 'password',
     role_id: 3,
     role_name: 'Auditor',
     status: 'active'

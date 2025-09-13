@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useApi, usePaginatedApi } from '@/lib/hooks/useApi';
 import { clientsApi } from '@/lib/api';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
@@ -34,6 +33,8 @@ import {
 export default function ClientsPage() {
   const { user, hasPermission } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -53,57 +54,39 @@ export default function ClientsPage() {
     status: 'active' as const
   });
 
-  // API hooks
-  const {
-    data: clients,
-    loading: clientsLoading,
-    fetchData: fetchClients,
-    updateParams
-  } = usePaginatedApi(clientsApi.list, { page: 1, limit: 20 });
-
-  const { execute: createClient, loading: createLoading } = useApi(clientsApi.create, {
-    showSuccessToast: true,
-    onSuccess: () => {
-      setIsCreateDialogOpen(false);
-      resetForm();
-      fetchClients();
-    }
-  });
-
-  const { execute: updateClient, loading: updateLoading } = useApi(clientsApi.update, {
-    showSuccessToast: true,
-    onSuccess: () => {
-      setIsEditDialogOpen(false);
-      setSelectedClient(null);
-      resetForm();
-      fetchClients();
-    }
-  });
-
-  const { execute: deleteClient } = useApi(clientsApi.delete, {
-    showSuccessToast: true,
-    onSuccess: () => fetchClients()
-  });
-
   useEffect(() => {
     if (user) {
       fetchClients();
     }
   }, [user]);
 
+  const fetchClients = async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      
+      const data = await clientsApi.list(params);
+      setClients(data || []);
+    } catch (error) {
+      console.error('Failed to fetch clients:', error);
+      toast.error('Failed to load clients');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Update search and filters
   useEffect(() => {
-    const delayedSearch = setTimeout(() => {
-      updateParams({
-        search: searchTerm || undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        page: 1
-      });
-      fetchClients();
-    }, 500);
+    if (user) {
+      const delayedSearch = setTimeout(() => {
+        fetchClients();
+      }, 500);
 
-    return () => clearTimeout(delayedSearch);
-  }, [searchTerm, statusFilter]);
+      return () => clearTimeout(delayedSearch);
+    }
+  }, [searchTerm, statusFilter, user]);
 
   const handleCreateClient = async () => {
     try {
@@ -123,9 +106,14 @@ export default function ClientsPage() {
         aws_account_ids: formData.aws_account_ids.split(',').map(id => id.trim()).filter(id => id)
       };
 
-      await createClient(clientData);
+      await clientsApi.create(clientData);
+      setIsCreateDialogOpen(false);
+      resetForm();
+      fetchClients();
+      toast.success('Client created successfully');
     } catch (error) {
-      // Error handled by useApi hook
+      console.error('Failed to create client:', error);
+      toast.error('Failed to create client');
     }
   };
 
@@ -138,9 +126,15 @@ export default function ClientsPage() {
         aws_account_ids: formData.aws_account_ids.split(',').map(id => id.trim()).filter(id => id)
       };
 
-      await updateClient(selectedClient.client_id, clientData);
+      await clientsApi.update(selectedClient.client_id, clientData);
+      setIsEditDialogOpen(false);
+      setSelectedClient(null);
+      resetForm();
+      fetchClients();
+      toast.success('Client updated successfully');
     } catch (error) {
-      // Error handled by useApi hook
+      console.error('Failed to update client:', error);
+      toast.error('Failed to update client');
     }
   };
 
@@ -148,9 +142,12 @@ export default function ClientsPage() {
     if (!confirm('Are you sure you want to delete this client?')) return;
 
     try {
-      await deleteClient(clientId);
+      await clientsApi.delete(clientId);
+      fetchClients();
+      toast.success('Client deleted successfully');
     } catch (error) {
-      // Error handled by useApi hook
+      console.error('Failed to delete client:', error);
+      toast.error('Failed to delete client');
     }
   };
 
@@ -367,7 +364,7 @@ export default function ClientsPage() {
             </Card>
 
             {/* Clients Grid */}
-          {clientsLoading ? (
+          {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <Card key={i} className="animate-pulse">
@@ -448,7 +445,7 @@ export default function ClientsPage() {
             </div>
           )}
 
-            {!clientsLoading && clients.length === 0 && (
+            {!loading && clients.length === 0 && (
               <Card>
                 <CardContent className="p-12 text-center">
                   <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -598,8 +595,8 @@ export default function ClientsPage() {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditClient} disabled={updateLoading}>
-              {updateLoading ? 'Updating...' : 'Update Client'}
+            <Button onClick={handleEditClient}>
+              Update Client
             </Button>
           </div>
         </DialogContent>
