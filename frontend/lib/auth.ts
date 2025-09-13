@@ -30,14 +30,22 @@ export class AuthService {
       const response = await authApi.login({ email, password });
       
       if (response.data) {
-        const { user, token, expires_in } = response.data;
+        const authData = response.data;
+        const user = {
+          user_id: authData.user_id,
+          username: authData.username,
+          email: authData.email,
+          role_name: authData.role_name,
+          role_id: authData.role_id,
+          status: 'active'
+        };
         
         // Store auth data
-        localStorage.setItem('auth_token', token);
+        localStorage.setItem('auth_token', authData.token);
         localStorage.setItem('user_data', JSON.stringify(user));
-        localStorage.setItem('token_expires', (Date.now() + expires_in * 1000).toString());
+        localStorage.setItem('token_expires', (Date.now() + authData.expires_in * 1000).toString());
         
-        return { user, token, expires_in };
+        return { user, token: authData.token, expires_in: authData.expires_in };
       }
       
       throw new Error('Invalid response format');

@@ -49,7 +49,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5002/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +71,7 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast.error('Connection failed. Please check if the backend is running on port 5002.');
+      toast.error('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
