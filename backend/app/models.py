@@ -3,23 +3,70 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
+import enum  # Add this import
+
+print(type(StatusEnum))  # Should be <class 'type'>
+print([type(StatusEnum.ACTIVE), type(StatusEnum.INACTIVE)])  # Should be [<class 'str'>, <class 'str'>]
 
 # ===========================
 # ENUM DEFINITIONS
 # ===========================
-class StatusEnum:
+class StatusEnum(enum.Enum):
     ACTIVE = 'active'
     INACTIVE = 'inactive'
 
-class InvoiceStatusEnum:
+class InvoiceStatusEnum(enum.Enum):
     DRAFT = 'draft'
     APPROVED = 'approved'
     FINALIZED = 'finalized'
     SENT = 'sent'
 
-class CurrencyEnum:
+class CurrencyEnum(enum.Enum):
     USD = 'USD'
     INR = 'INR'
+
+# Add these missing enum definitions (placeholders—customize as needed)
+class MetricTypeEnum(enum.Enum):
+    USAGE = 'usage'
+    REQUEST = 'request'
+    DATA_TRANSFER = 'data_transfer'
+
+class BillingMethodEnum(enum.Enum):
+    PER_UNIT = 'per_unit'
+    PER_HOUR = 'per_hour'
+    MONTHLY = 'monthly'
+
+class InvoicePreferenceEnum(enum.Enum):
+    MONTHLY = 'monthly'
+    QUARTERLY = 'quarterly'
+    ANNUALLY = 'annually'
+
+class ImportSourceEnum(enum.Enum):
+    CSV = 'csv'
+    API = 'api'
+    CUR = 'cur'  # AWS Cost and Usage Report
+
+class ImportStatusEnum(enum.Enum):
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
+class DocumentTypeEnum(enum.Enum):
+    INVOICE = 'invoice'
+    RECEIPT = 'receipt'
+    CONTRACT = 'contract'
+    REPORT = 'report'
+
+class NotificationTypeEnum(enum.Enum):
+    EMAIL = 'email'
+    SMS = 'sms'
+    IN_APP = 'in_app'
+
+class NotificationStatusEnum(enum.Enum):
+    PENDING = 'pending'
+    SENT = 'sent'
+    FAILED = 'failed'
 
 # ===========================
 # ROLE & ACCESS MODELS
@@ -68,7 +115,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey('roles.role_id'), nullable=False)
-    status = db.Column(db.String(20), default='active')
+    status = db.Column(db.Enum(StatusEnum), default=StatusEnum.ACTIVE)
     last_login = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -143,7 +190,7 @@ class Client(db.Model):
     billing_address = db.Column(db.Text)
     invoice_preferences = db.Column(db.String(20), default='monthly')
     default_currency = db.Column(db.String(3), default='USD')
-    status = db.Column(db.String(20), default='active')
+    status = db.Column(db.Enum(StatusEnum), default=StatusEnum.ACTIVE)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -302,8 +349,8 @@ class Invoice(db.Model):
     subtotal = db.Column(db.Numeric(12, 2), default=0)
     gst_amount = db.Column(db.Numeric(12, 2), default=0)
     total_amount = db.Column(db.Numeric(12, 2), default=0)
-    currency = db.Column(db.String(3), default='USD')
-    status = db.Column(db.String(20), default='draft')
+    currency = db.Column(db.Enum(CurrencyEnum), default=CurrencyEnum.USD)
+    status = db.Column(db.Enum(InvoiceStatusEnum), default=InvoiceStatusEnum.DRAFT)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
