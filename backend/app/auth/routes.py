@@ -12,25 +12,21 @@ def login():
     """Authenticate user and return JWT token"""
     try:
         data = request.get_json()
-        
+       
         if not data or not data.get('email') or not data.get('password'):
             return jsonify({'error': 'Email and password are required'}), 400
-        
+       
         user = User.query.filter_by(email=data['email']).first()
-        
+       
         if not user or not user.check_password(data['password']):
             log_user_action(None, 'login_failed', f"Failed login attempt for {data['email']}")
             return jsonify({'error': 'Invalid email or password'}), 401
         
-        if user.status != 'active':
+        if user.status.value != 'active':
             return jsonify({'error': 'Account is inactive'}), 401
         
-        # Update last login
-        user.last_login = datetime.utcnow()
-        db.session.commit()
-        
         # Generate JWT token
-        token = generate_jwt_token(user.user_id, user.email, user.role.role_name)
+        token = generate_jwt_token(user.user_id)
         
         # Log successful login
         login_user(user)
@@ -40,7 +36,7 @@ def login():
             'user_id': user.user_id,
             'username': user.username,
             'email': user.email,
-            'role_name': user.role.role_name,
+            'role': user.role.role_name,
             'role_id': user.role_id,
             'token': token,
             'expires_in': current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
@@ -48,39 +44,6 @@ def login():
         
     except Exception as e:
         current_app.logger.error(f"Login error: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-@bp.route('/demo-credentials', methods=['GET'])
-def get_demo_credentials():
-    """Get demo credentials for testing"""
-    try:
-        # Get all users with their roles
-        users = db.session.query(User, Role).join(Role).all()
-        
-        credentials = []
-        for user, role in users:
-            # Map role to icon and color
-            role_config = {
-                'Super Admin': {'icon': 'Shield', 'color': 'bg-blue-500'},
-                'Client Manager': {'icon': 'Users', 'color': 'bg-green-500'},
-                'Auditor': {'icon': 'BarChart3', 'color': 'bg-purple-500'}
-            }
-            
-            config = role_config.get(role.role_name, {'icon': 'User', 'color': 'bg-gray-500'})
-            
-            credentials.append({
-                'role': role.role_name,
-                'email': user.email,
-                'password': 'password123',  # Demo password
-                'description': role.description,
-                'icon': config['icon'],
-                'color': config['color']
-            })
-        
-        return jsonify({'credentials': credentials}), 200
-        
-    except Exception as e:
-        current_app.logger.error(f"Get demo credentials error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/logout', methods=['POST'])
@@ -117,6 +80,46 @@ def get_current_user():
         current_app.logger.error(f"Get current user error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+@bp.route('/refresh', methods=['POST'])
+def refresh_token():
+    """Refresh JWT token"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Authorization header required'}), 401
+        
+        token = auth_header.split(' ')[1]
+        
+        try:
+            # Decode token (even if expired)
+            payload = jwt.decode(
+                token, 
+                current_app.config['JWT_SECRET_KEY'], 
+                algorithms=['HS256'],
+                options={"verify_exp": False}
+            )
+            
+            user_id = payload.get('user_id')
+            user = User.query.get(user_id)
+            
+            if not user or user.status.value != 'active':
+                return jsonify({'error': 'Invalid user'}), 401
+            
+            # Generate new token
+            new_token = generate_jwt_token(user.user_id)
+            
+            return jsonify({
+                'token': new_token,
+                'expires_in': current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
+            }), 200
+            
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+            
+    except Exception as e:
+        current_app.logger.error(f"Token refresh error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @bp.route('/verify', methods=['POST'])
 def verify_token():
     """Verify JWT token validity"""
@@ -124,22 +127,22 @@ def verify_token():
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authorization header required'}), 401
-        
+       
         token = auth_header.split(' ')[1]
-        payload = decode_jwt_token(token)
+        user_id = decode_jwt_token(token)
         
-        if not payload:
+        if not user_id:
             return jsonify({'error': 'Invalid or expired token'}), 401
         
-        user = User.query.get(payload.get('user_id'))
-        if not user or user.status != 'active':
+        user = User.query.get(user_id)
+        if not user or user.status.value != 'active':
             return jsonify({'error': 'Invalid user'}), 401
-        
+       
         return jsonify({
             'valid': True,
             'user': user.to_dict()
         }), 200
-        
+       
     except Exception as e:
         current_app.logger.error(f"Token verification error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500

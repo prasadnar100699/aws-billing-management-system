@@ -1,100 +1,100 @@
 "use client";
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { 
-  Eye, 
-  EyeOff, 
-  Building2, 
-  Shield, 
-  Users, 
+import {
+  Eye,
+  EyeOff,
+  Building2,
+  Shield,
+  Users,
   BarChart3,
   Lock,
   Mail,
   ArrowRight,
   CheckCircle,
   Cloud,
-  DollarSign
+  DollarSign,
+  Circle
 } from 'lucide-react';
+
+// Map backend icon names to Lucide components
+const iconMap: { [key: string]: React.ComponentType<any> } = {
+  Shield,
+  Users,
+  BarChart3,
+  Circle // Fallback icon
+};
+
+interface DemoCredential {
+  role: string;
+  email: string;
+  password: string;
+  description: string;
+  color: string;
+  icon: string;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [demoCredentials, setDemoCredentials] = useState<DemoCredential[]>([]);
   const router = useRouter();
+
+  // Prefetch dashboard and fetch demo credentials
+  useEffect(() => {
+    router.prefetch('/dashboard');
+    
+    // Fetch demo credentials from backend
+    const fetchDemoCredentials = async () => {
+      try {
+        const response = await axios.get('http://localhost:5002/auth/demo-credentials');
+        setDemoCredentials(response.data);
+      } catch (error: any) {
+        console.error('Failed to fetch demo credentials:', error);
+        toast.error('Failed to load demo credentials');
+      }
+    };
+    
+    fetchDemoCredentials();
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+   
     if (!email || !password) {
       toast.error('Please fill in all fields');
       return;
     }
-
     setIsLoading(true);
-
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Store auth data
-        localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('user_data', JSON.stringify(data));
-        
-        toast.success('Login successful!');
+      const response = await axios.post('/api/auth/login', { email, password });
+      const data = response.data;
+      
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user_data', JSON.stringify(data));
+     
+      toast.success('Login successful!');
+      setTimeout(() => {
         router.push('/dashboard');
-      } else {
-        toast.error(data.error || 'Login failed');
-      }
-    } catch (error) {
+        router.refresh();
+      }, 0);
+    } catch (error: any) {
       console.error('Login error:', error);
-      toast.error('Login failed. Please try again.');
+      const errorMessage = error.response?.data?.error || 'Login failed. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-
-  const demoCredentials = [
-    {
-      role: 'Super Admin',
-      email: 'admin@tejit.com',
-      password: 'Admin@123',
-      description: 'Full system access',
-      icon: Shield,
-      color: 'bg-blue-500'
-    },
-    {
-      role: 'Client Manager',
-      email: 'manager@tejit.com',
-      password: 'Manager@123',
-      description: 'Manage clients & invoices',
-      icon: Users,
-      color: 'bg-green-500'
-    },
-    {
-      role: 'Auditor',
-      email: 'auditor@tejit.com',
-      password: 'Auditor@123',
-      description: 'Reports & analytics',
-      icon: BarChart3,
-      color: 'bg-purple-500'
-    }
-  ];
 
   const features = [
     {
@@ -123,7 +123,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Background Pattern */}
       <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-      
+     
       <div className="relative flex min-h-screen">
         {/* Left Side - Branding & Features */}
         <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 p-12 text-white">
@@ -139,7 +139,7 @@ export default function LoginPage() {
                   <p className="text-blue-100">AWS Billing Management</p>
                 </div>
               </div>
-              
+             
               <div className="space-y-6">
                 <div>
                   <h2 className="text-4xl font-bold mb-4 leading-tight">
@@ -150,7 +150,6 @@ export default function LoginPage() {
                     Comprehensive client billing and management system designed specifically for AWS service providers.
                   </p>
                 </div>
-
                 {/* Features Grid */}
                 <div className="grid grid-cols-2 gap-4 mt-8">
                   {features.map((feature, index) => (
@@ -163,7 +162,6 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
-
             {/* Footer */}
             <div className="flex items-center space-x-4 text-blue-100">
               <CheckCircle className="w-5 h-5" />
@@ -171,7 +169,6 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-
         {/* Right Side - Login Form */}
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="w-full max-w-md space-y-8">
@@ -187,7 +184,6 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
-
             {/* Login Card */}
             <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
               <CardHeader className="space-y-1 pb-6">
@@ -217,7 +213,6 @@ export default function LoginPage() {
                       />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="password" className="text-sm font-medium text-gray-700">
                       Password
@@ -238,11 +233,10 @@ export default function LoginPage() {
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                       >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {showPassword ? <the-w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
-
                   <Button
                     type="submit"
                     disabled={isLoading}
@@ -261,7 +255,6 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </form>
-
                 {/* Demo Credentials */}
                 <div className="space-y-4">
                   <div className="relative">
@@ -272,31 +265,32 @@ export default function LoginPage() {
                       <span className="px-4 bg-white text-gray-500">Demo Credentials</span>
                     </div>
                   </div>
-
                   <div className="grid gap-3">
-                    {demoCredentials.map((cred, index) => (
-                      <div
-                        key={index}
-                        onClick={() => {
-                          setEmail(cred.email);
-                          setPassword(cred.password);
-                        }}
-                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all duration-200 group"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-8 h-8 ${cred.color} rounded-lg flex items-center justify-center`}>
-                            <cred.icon className="w-4 h-4 text-white" />
+                    {demoCredentials.map((cred, index) => {
+                      const Icon = iconMap[cred.icon] || Circle;
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            setEmail(cred.email);
+                            setPassword(cred.password);
+                          }}
+                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all duration-200 group"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-8 h-8 ${cred.color} rounded-lg flex items-center justify-center`}>
+                              <Icon className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm">{cred.role}</p>
+                              <p className="text-xs text-gray-600">{cred.description}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900 text-sm">{cred.role}</p>
-                            <p className="text-xs text-gray-600">{cred.description}</p>
-                          </div>
+                          <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                         </div>
-                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-
                   <div className="text-center">
                     <p className="text-xs text-gray-500">
                       Click any role above to auto-fill credentials
@@ -305,7 +299,6 @@ export default function LoginPage() {
                 </div>
               </CardContent>
             </Card>
-
             {/* System Status */}
             <div className="text-center space-y-2">
               <div className="flex items-center justify-center space-x-2 text-sm text-gray-600">
