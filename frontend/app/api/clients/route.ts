@@ -4,7 +4,6 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
     const { searchParams } = new URL(request.url);
     
     // Build query string
@@ -14,18 +13,18 @@ export async function GET(request: NextRequest) {
     });
 
     // Proxy the request to Flask backend
-    const backendResponse = await fetch(`${BACKEND_URL}/clients?${params}`, {
+    const backendResponse = await fetch(`${BACKEND_URL}/api/clients?${params}`, {
       method: 'GET',
       headers: {
-        'Authorization': authHeader || '',
         'Content-Type': 'application/json',
+        'Cookie': request.headers.get('Cookie') || ''
       },
     });
 
     const data = await backendResponse.json();
 
     if (backendResponse.ok) {
-      return NextResponse.json(data, { status: 200 });
+      return NextResponse.json(data.data, { status: 200 });
     } else {
       return NextResponse.json(
         { error: data.error || 'Failed to fetch clients' },
@@ -43,15 +42,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
     const clientData = await request.json();
 
-    // Proxy the request to Flask backend
-    const backendResponse = await fetch(`${BACKEND_URL}/clients`, {
+    // Proxy the request to Express backend
+    const backendResponse = await fetch(`${BACKEND_URL}/api/clients`, {
       method: 'POST',
       headers: {
-        'Authorization': authHeader || '',
         'Content-Type': 'application/json',
+        'Cookie': request.headers.get('Cookie') || ''
       },
       body: JSON.stringify(clientData),
     });
@@ -59,7 +57,7 @@ export async function POST(request: NextRequest) {
     const data = await backendResponse.json();
 
     if (backendResponse.ok) {
-      return NextResponse.json(data, { status: 201 });
+      return NextResponse.json(data.data, { status: 201 });
     } else {
       return NextResponse.json(
         { error: data.error || 'Failed to create client' },

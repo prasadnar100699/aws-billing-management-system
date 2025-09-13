@@ -7,27 +7,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002/a
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: true, // Include session cookies
   headers: {
     'Content-Type': 'application/json',
   },
 });
-
-// Request interceptor to add user email
-api.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const userData = localStorage.getItem('user_data');
-      if (userData) {
-        const user = JSON.parse(userData);
-        config.headers['X-User-Email'] = user.email;
-      }
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
 
 // Response interceptor for error handling
 api.interceptors.response.use(
@@ -69,10 +53,14 @@ export const authApi = {
     fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include session cookies
       body: JSON.stringify(credentials)
     }),
   
-  logout: () => fetch('/api/auth/logout', { method: 'POST' }),
+  logout: () => fetch('/api/auth/logout', { 
+    method: 'POST',
+    credentials: 'include'
+  }),
   
   getCurrentUser: () => {
     const userData = localStorage.getItem('user_data');
@@ -127,11 +115,11 @@ export const clientsApi = {
 
 // Analytics API
 export const analyticsApi = {
-  getSuperAdminAnalytics: () => api.get<any>('/analytics/super-admin'),
+  getSuperAdminAnalytics: () => fetch('/api/analytics/super-admin', { credentials: 'include' }).then(r => r.json()),
   
-  getClientManagerAnalytics: () => api.get<any>('/analytics/client-manager'),
+  getClientManagerAnalytics: () => fetch('/api/analytics/client-manager', { credentials: 'include' }).then(r => r.json()),
   
-  getAuditorAnalytics: () => api.get<any>('/analytics/auditor'),
+  getAuditorAnalytics: () => fetch('/api/analytics/auditor', { credentials: 'include' }).then(r => r.json()),
   
   cacheAnalytics: () => api.post<ApiResponse>('/analytics/cache'),
   
