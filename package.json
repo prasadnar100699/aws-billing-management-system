@@ -1,0 +1,19 @@
+{
+  "name": "aws-billing-system",
+  "version": "1.0.0",
+  "description": "Enterprise AWS Billing Management System",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:dev": "cd backend && npm run dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "keywords": ["billing", "aws", "enterprise", "management"],
+  "author": "Enterprise Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
