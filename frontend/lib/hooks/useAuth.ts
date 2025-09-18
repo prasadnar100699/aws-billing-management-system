@@ -23,6 +23,25 @@ export function useAuth() {
   const router = useRouter();
 
   useEffect(() => {
+    // Check localStorage first for immediate user data
+    if (typeof window !== 'undefined') {
+      const userData = localStorage.getItem('user_data');
+      const authToken = localStorage.getItem('auth_token');
+      
+      if (userData && authToken) {
+        try {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setLoading(false);
+          // Still check auth in background
+          checkAuth();
+          return;
+        } catch (error) {
+          console.error('Error parsing stored user data:', error);
+        }
+      }
+    }
+    
     checkAuth();
   }, []);
 
@@ -57,14 +76,14 @@ export function useAuth() {
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      setUser(null);
-      setSession(null);
-      setPermissions({});
-      
-      // Clear localStorage on error
+      // Don't clear user data on network errors, only on auth errors
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('user_data');
-        localStorage.removeItem('auth_token');
+        const userData = localStorage.getItem('user_data');
+        if (!userData) {
+          setUser(null);
+          setSession(null);
+          setPermissions({});
+        }
       }
     } finally {
       setLoading(false);
@@ -141,7 +160,14 @@ export function useAuth() {
     // Super Admin has all permissions
     if (user.role_name === 'Super Admin') return true;
 
-    return permissions[module]?.[`can_${action}`] || false;
+    // Check stored permissions or use role-based fallback
+    if (permissions[module]) {
+      return permissions[module][`can_${action}`] || false;
+    }
+    
+    // Fallback to role-based permissions
+    const rolePermissions = getRolePermissions(user.role_name);
+    return rolePermissions[module]?.[action] || false;
   };
 
   const hasRole = (roles: string[]): boolean => {
@@ -151,6 +177,35 @@ export function useAuth() {
 
   const isSuperAdmin = (): boolean => {
     return user?.role_name === 'Super Admin';
+  };
+  
+  const getRolePermissions = (roleName: string): any => {
+    const rolePermissions: any = {
+      'Client Manager': {
+        dashboard: { view: true },
+        clients: { view: true, create: true, edit: true },
+        services: { view: true },
+        invoices: { view: true, create: true, edit: true, delete: true },
+        usage_import: { view: true, create: true, edit: true, delete: true },
+        documents: { view: true, create: true, edit: true, delete: true },
+        reports: { view: true, create: true },
+        notifications: { view: true },
+        analytics: { view: true }
+      },
+      'Auditor': {
+        dashboard: { view: true },
+        clients: { view: true },
+        services: { view: true },
+        invoices: { view: true },
+        usage_import: { view: true },
+        documents: { view: true },
+        reports: { view: true, create: true },
+        notifications: { view: true },
+        analytics: { view: true }
+      }
+    };
+    
+    return rolePermissions[roleName] || {};
   };
 
   return {

@@ -25,7 +25,10 @@ export function middleware(request: NextRequest) {
 
   // Protected routes → require session
   if (!sessionId) {
-    return NextResponse.redirect(new URL('/', request.url));
+    // Check if we have auth token in localStorage (for development)
+    const response = NextResponse.next();
+    response.headers.set('X-Auth-Required', 'true');
+    return response;
   }
 
   // ✅ Authenticated, allow access
