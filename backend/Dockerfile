@@ -32,7 +32,7 @@ EXPOSE 5002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5002/api/health || exit 1
+  CMD curl -f http://10.10.50.93:5002/api/health || exit 1
 
 # Start application
 CMD ["npm", "start"]

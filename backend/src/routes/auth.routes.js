@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const AuthController = require('../controllers/auth.controller');
+const authController = require('../controllers/auth.controller');
 
 // Instantiate AuthController to ensure bound methods are used
-const authController = new AuthController();
+// const authController = new AuthController();
 
 /**
  * Authentication Routes

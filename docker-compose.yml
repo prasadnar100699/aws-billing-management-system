@@ -34,7 +34,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PORT=5002
-      - CORS_ORIGINS=http://localhost:3000
+      - CORS_ORIGINS=http://10.10.50.93:3000
       - UPLOAD_DIR=/app/uploads
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - JWT_EXPIRES_IN=24h
@@ -46,7 +46,7 @@ services:
       - backend_logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/api/health"]
+      test: ["CMD", "curl", "-f", "http://10.10.50.93:5002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -87,9 +87,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:5002
-      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5002
-      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_API_URL=http://10.10.50.93:5002
+      - NEXT_PUBLIC_BACKEND_URL=http://10.10.50.93:5002
+      - NEXT_PUBLIC_APP_URL=http://10.10.50.93:3000
       - NEXT_PUBLIC_APP_NAME=AWS Billing Management
       - NEXT_PUBLIC_COMPANY_NAME=Tej IT Solutions
     depends_on:
@@ -97,7 +97,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://10.10.50.93:3000"]
       interval: 30s
       timeout: 10s
       retries: 3

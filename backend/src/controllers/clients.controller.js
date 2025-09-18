@@ -80,8 +80,8 @@ class ClientsController {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-      const search = req.query.search || '';
-      const status = req.query.status;
+      const search = '';
+      const status = '';
       const offset = (page - 1) * limit;
 
       let whereClause = '1=1';
@@ -112,14 +112,14 @@ class ClientsController {
       const clients = await getMany(query, [...params, limit, offset]);
 
       // Parse aws_account_ids JSON
-      const processedClients = clients.map(client => ({
-        ...client,
-        aws_account_ids: client.aws_account_ids ? JSON.parse(client.aws_account_ids || '[]') : []
-      }));
+      // const processedClients = clients.map(client => ({
+      //   ...client,
+      //   aws_account_ids: client.aws_account_ids ? JSON.parse(client.aws_account_ids || '[]') : []
+      // }));
 
       res.json({
         success: true,
-        data: processedClients,
+        // data: processedClients,
         pagination: {
           total,
           pages: Math.ceil(total / limit),

@@ -371,9 +371,9 @@ export default function LoginPage() {
             <div className="text-center space-y-2">
               <div className="flex items-center justify-center space-x-2 text-sm text-gray-600">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Backend: localhost:5002</span>
+                <span>Backend: 10.10.50.93:5002</span>
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Frontend: localhost:3002</span>
+                <span>Frontend: 10.10.50.93:3002</span>
               </div>
               <p className="text-xs text-gray-500">
                 © 2024 Tej IT Solutions. AWS Billing Management System v2.0

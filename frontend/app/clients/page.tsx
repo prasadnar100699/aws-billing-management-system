@@ -58,7 +58,7 @@ export default function ClientsPage() {
     loading: clientsLoading,
     fetchData: fetchClients,
     updateParams
-  } = usePaginatedApi(clientsApi.list, { page: 1, limit: 20 });
+  } = usePaginatedApi(clientsApi.listClients, { page: 1, limit: 20 });
 
   const { execute: createClient, loading: createLoading } = useApi(clientsApi.create, {
     showSuccessToast: true,

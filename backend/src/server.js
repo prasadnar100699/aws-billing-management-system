@@ -24,11 +24,11 @@ const startServer = async () => {
       console.log(`   • CORS Origins: ${process.env.CORS_ORIGINS}`);
       console.log('');
       console.log('📡 API Endpoints:');
-      console.log(`   • Health: http://localhost:${PORT}/api/health`);
-      console.log(`   • Auth: http://localhost:${PORT}/auth/*`);
-      console.log(`   • Clients: http://localhost:${PORT}/api/clients/*`);
-      console.log(`   • Invoices: http://localhost:${PORT}/api/invoices/*`);
-      console.log(`   • Analytics: http://localhost:${PORT}/api/analytics/*`);
+      console.log(`   • Health: http://10.10.50.93:${PORT}/api/health`);
+      console.log(`   • Auth: http://10.10.50.93:${PORT}/auth/*`);
+      console.log(`   • Clients: http://10.10.50.93:${PORT}/api/clients/*`);
+      console.log(`   • Invoices: http://10.10.50.93:${PORT}/api/invoices/*`);
+      console.log(`   • Analytics: http://10.10.50.93:${PORT}/api/analytics/*`);
       console.log('');
       console.log('🎯 Ready to accept connections!');
     });

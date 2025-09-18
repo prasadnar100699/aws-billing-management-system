@@ -87,7 +87,7 @@ PORT=5002
 NODE_ENV=development
 
 # CORS Configuration
-CORS_ORIGINS=http://localhost:3002,http://localhost:3000
+CORS_ORIGINS=http://10.10.50.93:3002,http://10.10.50.93:3000
 
 # Session Configuration
 SESSION_SECRET=your-super-secret-session-key
@@ -110,11 +110,11 @@ Create `frontend/.env.local` file based on `frontend/.env.local.example`:
 
 ```bash
 # API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:5002
-NEXT_PUBLIC_BACKEND_URL=http://localhost:5002
+NEXT_PUBLIC_API_URL=http://10.10.50.93:5002
+NEXT_PUBLIC_BACKEND_URL=http://10.10.50.93:5002
 
 # Application Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3002
+NEXT_PUBLIC_APP_URL=http://10.10.50.93:3002
 NEXT_PUBLIC_APP_NAME=AWS Billing Management
 NEXT_PUBLIC_COMPANY_NAME=Tej IT Solutions
 ```
@@ -188,19 +188,19 @@ cp frontend/.env.local.example frontend/.env.local
 cd backend
 npm install
 npm run dev
-# Backend will start on http://localhost:5002
+# Backend will start on http://10.10.50.93:5002
 
 # Terminal 2: Start Frontend Server
 cd frontend
 npm run dev
-# Frontend will start on http://localhost:3002
+# Frontend will start on http://10.10.50.93:3002
 ```
 
 ### 4. Access the Application
 
-- **Application**: http://localhost:3002
-- **Backend API**: http://localhost:5002
-- **Health Check**: http://localhost:5002/api/health
+- **Application**: http://10.10.50.93:3002
+- **Backend API**: http://10.10.50.93:5002
+- **Health Check**: http://10.10.50.93:5002/api/health
 
 ## 🔐 Default Authentication
 
@@ -215,7 +215,7 @@ The system comes with a pre-configured Super Admin user:
 ## 📖 Usage Guide
 
 ### 1. Initial Login
-1. Navigate to http://localhost:3002
+1. Navigate to http://10.10.50.93:3002
 2. Click "Super Administrator" quick access card or manually enter:
    - Username: `admin@100699`
    - Password: `admin@100699`
@@ -438,7 +438,7 @@ The system uses a comprehensive MySQL database with the following key tables:
 3. **Frontend API Errors**
    ```bash
    # Check if backend is running
-   curl http://localhost:5002/api/health
+   curl http://10.10.50.93:5002/api/health
    
    # Verify CORS settings in backend/.env
    echo $CORS_ORIGINS
@@ -501,10 +501,10 @@ npm run test:watch
 ### API Testing
 ```bash
 # Health check
-curl http://localhost:5002/api/health
+curl http://10.10.50.93:5002/api/health
 
 # Test authentication
-curl -X POST http://localhost:5002/auth/login \
+curl -X POST http://10.10.50.93:5002/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@100699","password":"admin@100699"}'
 ```

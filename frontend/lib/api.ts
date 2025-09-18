@@ -1,5 +1,5 @@
 // Frontend API Configuration with Session-based Authentication
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5002';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://10.10.50.93:5002';
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -189,7 +189,10 @@ export const clientsApi = {
 
   delete: (clientId: number) => apiClient.delete(`/api/clients/${clientId}`),
 
-  getAwsMappings: (clientId: number) => apiClient.get(`/api/clients/${clientId}/aws`)
+  getAwsMappings: (clientId: number) => apiClient.get(`/api/clients/${clientId}/aws`),
+
+  listClients: (params?: { page?: number, limit?: number }) =>
+    apiClient.get('/api/clients', params),
 };
 
 // ==========================

@@ -98,9 +98,9 @@ npm run dev
 ```
 
 ### 5. Access Application
-- **Frontend**: http://localhost:3002
-- **Backend API**: http://localhost:5002
-- **Health Check**: http://localhost:5002/api/health
+- **Frontend**: http://10.10.50.93:3002
+- **Backend API**: http://10.10.50.93:5002
+- **Health Check**: http://10.10.50.93:5002/api/health
 
 ## 🔐 Default Authentication
 
@@ -118,7 +118,7 @@ npm run dev
 
 ### 1. Backend Health Check
 ```bash
-curl http://localhost:5002/api/health
+curl http://10.10.50.93:5002/api/health
 ```
 Expected response:
 ```json
@@ -136,7 +136,7 @@ Expected response:
 
 ### 2. User Login Test
 ```bash
-curl -X POST http://localhost:5002/auth/login \
+curl -X POST http://10.10.50.93:5002/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@100699","password":"admin@100699"}' \
   -c cookies.txt
@@ -160,12 +160,12 @@ Expected response:
 
 ### 3. Protected Route Test
 ```bash
-curl http://localhost:5002/api/dashboard \
+curl http://10.10.50.93:5002/api/dashboard \
   -b cookies.txt
 ```
 
 ### 4. Frontend Login Test
-1. Navigate to http://localhost:3002
+1. Navigate to http://10.10.50.93:3002
 2. Click "Super Administrator" quick access card
 3. Verify automatic credential fill
 4. Click "Sign In"
