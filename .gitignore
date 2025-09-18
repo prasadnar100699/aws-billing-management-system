@@ -1,0 +1,117 @@
+# ========================================
+# 🌐 Global Ignores (both frontend & backend)
+# ========================================
+
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS/System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Lock files (if not required for versioning)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ========================================
+# 🔐 Environment Files
+# ========================================
+
+# Environment variable files
+# .env
+# .env.*           # All env files, except examples
+# !.env.example
+# !.env.local.example
+
+# frontend/.env.local
+# backend/.env
+
+# ========================================
+# ⚙️ Build & Temp Directories
+# ========================================
+
+# Frontend (Next.js, Tailwind, TS)
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.turbo/
+frontend/.cache/
+frontend/.tailwind/
+frontend/coverage/
+frontend/dist/
+frontend/.tsbuildinfo
+
+# Backend
+backend/coverage/
+backend/dist/
+backend/build/
+backend/tmp/
+backend/uploads/         # If dynamic file uploads stored here
+
+# ========================================
+# 📤 Uploads (if stored locally)
+# ========================================
+
+uploads/
+frontend/uploads/
+backend/uploads/
+
+# ========================================
+# 🐳 Docker & Redis Artifacts
+# ========================================
+
+# Docker-related
+docker-compose.override.yml
+.docker/
+*.tar
+
+# Redis artifacts (if generated locally)
+*.rdb
+*.aof
+dump.rdb
+appendonly.aof
+
+# ========================================
+# 🧪 Test Artifacts
+# ========================================
+
+coverage/
+*.test.*
+*.spec.*
+jest.config.*
+cypress/
+cypress.config.*
+
+# ========================================
+# 🧾 SQL Dumps
+# ========================================
+
+*.sql
+*.sql.gz
+*.dump
+
+# ========================================
+# 🔧 Worker/Job Cache
+# ========================================
+
+backend/src/worker.log
+backend/src/*.out
+backend/src/*.tmp
+jobs/*.log
+jobs/*.out
+jobs/*.tmp
+.env

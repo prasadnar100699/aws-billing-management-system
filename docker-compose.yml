@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # Redis Service
+  redis:
+    image: redis:7-alpine
+    container_name: aws-billing-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aws-billing-backend
+    ports:
+      - "5002:5002"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=202.71.157.170
+      - DB_PORT=3308
+      - DB_NAME=aws_billing_system
+      - DB_USER=admin
+      - DB_PASSWORD=admin@9955
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PORT=5002
+      - CORS_ORIGINS=http://localhost:3000
+      - UPLOAD_DIR=/app/uploads
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_EXPIRES_IN=24h
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background Worker Service
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aws-billing-worker
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=202.71.157.170
+      - DB_PORT=3308
+      - DB_NAME=aws_billing_system
+      - DB_USER=admin
+      - DB_PASSWORD=admin@9955
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - UPLOAD_DIR=/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+    command: npm run worker
+    restart: unless-stopped
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aws-billing-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5002
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5002
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_NAME=AWS Billing Management
+      - NEXT_PUBLIC_COMPANY_NAME=Tej IT Solutions
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  redis_data:
+  backend_uploads:
+  backend_logs:
+
+networks:
+  default:
+    name: aws-billing-network
