@@ -1,17 +1,36 @@
-const { getOne, getMany, update } = require('../config/db');
-const sessionManager = require('../config/session');
+const { getOne, update, getMany } = require('../config/db');
 const auditLogger = require('../utils/auditLogger');
 
 class AuthController {
+  /**
+   * Constructor to bind methods to the instance
+   * Ensures `this` context is preserved when methods are used as callbacks
+   */
+  constructor() {
+    this.login = this.login.bind(this);
+    this.getUserPermissions = this.getUserPermissions.bind(this);
+    this.logout = this.logout.bind(this);
+    this.verifyAuth = this.verifyAuth.bind(this);
+  }
+
+  /**
+   * Handle user login with username/email and password
+   * Checks user exists, is active, and validates plain text password
+   * Updates last_login timestamp and returns user data with permissions
+   */
   async login(req, res) {
     try {
       const { email, password } = req.body;
 
+      // Validate input
       if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
+        return res.status(400).json({ 
+          success: false,
+          error: 'Email/username and password are required' 
+        });
       }
 
-      // Find user by email or username
+      // Find user by email or username - only active users
       const user = await getOne(`
         SELECT u.*, r.role_name 
         FROM users u
@@ -20,194 +39,179 @@ class AuthController {
       `, [email, email]);
 
       if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ 
+          success: false,
+          error: 'Invalid credentials or account not active' 
+        });
       }
 
-      // Simple plaintext password comparison (as requested)
+      // Check if account is locked due to failed attempts
+      if (user.locked_until && new Date(user.locked_until) > new Date()) {
+        return res.status(423).json({ 
+          success: false,
+          error: 'Account is temporarily locked due to multiple failed login attempts' 
+        });
+      }
+
+      // Validate plain text password
       if (user.password !== password) {
         // Increment login attempts
-        await update('users',
-          { login_attempts: (user.login_attempts || 0) + 1 },
-          'user_id = ?',
-          [user.user_id]
-        );
-        return res.status(401).json({ error: 'Invalid credentials' });
+        const newAttempts = (user.login_attempts || 0) + 1;
+        const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 5;
+        
+        let updateData = { login_attempts: newAttempts };
+        
+        // Lock account if max attempts reached
+        if (newAttempts >= maxAttempts) {
+          const lockoutDuration = parseInt(process.env.LOCKOUT_DURATION_MINUTES) || 30;
+          updateData.locked_until = new Date(Date.now() + lockoutDuration * 60 * 1000);
+        }
+        
+        await update('users', updateData, 'user_id = ?', [user.user_id]);
+        
+        return res.status(401).json({ 
+          success: false,
+          error: 'Invalid credentials' 
+        });
       }
 
-      // Check if account is locked
-      if (user.locked_until && new Date(user.locked_until) > new Date()) {
-        return res.status(423).json({ error: 'Account is temporarily locked' });
-      }
+      // Get user permissions from role_permissions table
+      const permissions = await this.getUserPermissions(user.role_id);
 
-      // Create session
-      const sessionId = await sessionManager.createSession(
-        user.user_id,
-        req.ip || req.connection.remoteAddress,
-        req.get('User-Agent') || ''
-      );
-
-      // Update user login info
+      // Update user login info on successful login
       await update('users', {
         last_login: new Date(),
         login_attempts: 0,
         locked_until: null
       }, 'user_id = ?', [user.user_id]);
 
-      // Log successful login
-      await auditLogger.log({
+      // Log successful login for audit trail
+      try {
+        await auditLogger.log({
+          user_id: user.user_id,
+          action_type: 'LOGIN',
+          entity_type: 'user',
+          entity_name: user.username,
+          description: 'User logged in successfully',
+          ip_address: req.ip || req.connection.remoteAddress,
+          user_agent: req.get('User-Agent')
+        });
+      } catch (auditError) {
+        console.warn('Audit logging failed:', auditError.message);
+      }
+
+      // Prepare user data for response (exclude sensitive information)
+      const userData = {
         user_id: user.user_id,
-        action_type: 'LOGIN',
-        entity_type: 'user',
-        entity_name: user.username,
-        description: 'User logged in successfully',
-        ip_address: req.ip,
-        user_agent: req.get('User-Agent'),
-        session_id: sessionId
-      });
+        username: user.username,
+        email: user.email,
+        role_id: user.role_id,
+        role_name: user.role_name,
+        status: user.status,
+        last_login: new Date().toISOString()
+      };
 
-      // Set session cookie
-      res.cookie('session_id', sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 8 * 60 * 60 * 1000 // 8 hours
-      });
-
+      // Return success response with user data and permissions
       res.json({
         success: true,
         message: 'Login successful',
-        session_id: sessionId,
-        user: {
-          user_id: user.user_id,
-          username: user.username,
-          email: user.email,
-          role_name: user.role_name,
-          role_id: user.role_id,
-          status: user.status
+        data: {
+          user: userData,
+          permissions: permissions
         }
       });
+
     } catch (error) {
       console.error('Login error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ 
+        success: false,
+        error: 'Internal server error during login' 
+      });
     }
   }
 
+  /**
+   * Get user permissions based on role_id
+   * Returns object with module permissions for easy frontend access
+   */
+  async getUserPermissions(roleId) {
+    try {
+      // Get all permissions for this role
+      const rolePermissions = await getMany(`
+        SELECT module_name, can_view, can_create, can_edit, can_delete
+        FROM role_permissions 
+        WHERE role_id = ?
+      `, [roleId]);
+
+      // Convert to object format for easy frontend access
+      const permissions = {};
+      rolePermissions.forEach(perm => {
+        permissions[perm.module_name] = {
+          can_view: Boolean(perm.can_view),
+          can_create: Boolean(perm.can_create),
+          can_edit: Boolean(perm.can_edit),
+          can_delete: Boolean(perm.can_delete)
+        };
+      });
+
+      return permissions;
+    } catch (error) {
+      console.error('Get user permissions error:', error);
+      return {}; // Return empty permissions on error
+    }
+  }
+
+  /**
+   * Handle user logout
+   * No session management, so just log the action
+   */
   async logout(req, res) {
     try {
-      const sessionId = req.cookies?.session_id || req.headers['x-session-id'];
-
-      if (sessionId) {
-        await sessionManager.destroySession(sessionId);
-
-        if (req.user) {
+      // Log logout for audit trail if user info is provided
+      if (req.body.user_id) {
+        try {
           await auditLogger.log({
-            user_id: req.user.user_id,
+            user_id: req.body.user_id,
             action_type: 'LOGOUT',
             entity_type: 'user',
-            entity_name: req.user.username,
             description: 'User logged out',
-            ip_address: req.ip,
-            user_agent: req.get('User-Agent'),
-            session_id: sessionId
+            ip_address: req.ip || req.connection.remoteAddress,
+            user_agent: req.get('User-Agent')
           });
+        } catch (auditError) {
+          console.warn('Audit logging failed:', auditError.message);
         }
       }
 
-      res.clearCookie('session_id');
-      res.json({ success: true, message: 'Logged out successfully' });
-    } catch (error) {
-      console.error('Logout error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  async getCurrentUser(req, res) {
-    try {
-      const sessionId = req.cookies?.session_id || req.headers['x-session-id'];
-
-      if (!sessionId) {
-        return res.status(401).json({ error: 'No session found' });
-      }
-
-      const sessionData = await sessionManager.validateSession(sessionId);
-
-      if (!sessionData) {
-        res.clearCookie('session_id');
-        return res.status(401).json({ error: 'Invalid or expired session' });
-      }
-
-      // 🔥 No permissions lookup — just return session user
-      res.json({
-        success: true,
-        user: sessionData.user,
-        session: {
-          session_id: sessionData.session_id,
-          expires_at: sessionData.expires_at
-        }
+      res.json({ 
+        success: true, 
+        message: 'Logged out successfully' 
       });
     } catch (error) {
-      console.error('Get current user error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error('Logout error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Internal server error during logout' 
+      });
     }
   }
 
-  async forceLogout(req, res) {
+  /**
+   * Verify user authentication
+   * No authentication state, so return a simple response
+   */
+  async verifyAuth(req, res) {
     try {
-      const { user_id } = req.body;
-
-      if (!user_id) {
-        return res.status(400).json({ error: 'user_id is required' });
-      }
-
-      if (req.user.role_name !== 'Super Admin') {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      const success = await sessionManager.destroyUserSessions(user_id);
-
-      if (success) {
-        await auditLogger.log({
-          user_id: req.user.user_id,
-          action_type: 'FORCE_LOGOUT',
-          entity_type: 'user',
-          entity_id: user_id,
-          description: 'Force logout initiated by Super Admin',
-          ip_address: req.ip,
-          user_agent: req.get('User-Agent'),
-          session_id: req.session?.session_id
-        });
-
-        res.json({ success: true, message: 'User sessions terminated successfully' });
-      } else {
-        res.status(500).json({ error: 'Failed to terminate sessions' });
-      }
+      res.json({
+        success: true,
+        message: 'No authentication state maintained'
+      });
     } catch (error) {
-      console.error('Force logout error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  async getActiveSessions(req, res) {
-    try {
-      if (req.user.role_name !== 'Super Admin') {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-
-      const sessions = await getMany(`
-        SELECT s.session_id, s.user_id, s.ip_address, s.user_agent,
-               s.created_at, s.last_activity, s.expires_at,
-               u.username, u.email, r.role_name
-        FROM sessions s
-        JOIN users u ON s.user_id = u.user_id
-        JOIN roles r ON u.role_id = r.role_id
-        WHERE s.is_active = TRUE AND s.expires_at > NOW()
-        ORDER BY s.last_activity DESC
-      `);
-
-      res.json({ success: true, data: { sessions } });
-    } catch (error) {
-      console.error('Get active sessions error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error('Auth verification error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Internal server error during auth verification' 
+      });
     }
   }
 }

@@ -3,7 +3,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
 const path = require('path');
 const dotenv = require('dotenv');
 
@@ -40,9 +39,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Cookie parser for session management
-app.use(cookieParser());
-
 // Compression middleware
 app.use(compression());
 
@@ -58,7 +54,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../Uploads')));
 
 // API routes
 app.use('/auth', authRoutes);
@@ -80,7 +76,7 @@ app.get('/api/health', (req, res) => {
     services: {
       database: 'healthy',
       server: 'healthy',
-      session_store: 'healthy'
+      session_store: 'none'
     },
     version: '2.0.0'
   });
@@ -92,7 +88,7 @@ app.get('/', (req, res) => {
     message: 'AWS Billing Management System API v2.0',
     version: '2.0.0',
     status: 'running',
-    authentication: 'session-based',
+    authentication: 'none',
     endpoints: {
       health: '/api/health',
       auth: '/auth/*',
@@ -113,17 +109,16 @@ app.get('/', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   
-  // Log error to audit trail if user is authenticated
-  if (req.user) {
+  // Log error to audit trail if user info is provided
+  if (req.body.user_id) {
     require('./utils/auditLogger').log({
-      user_id: req.user.user_id,
+      user_id: req.body.user_id,
       action_type: 'ERROR',
       entity_type: 'system',
       entity_name: 'Application Error',
       description: err.message,
       ip_address: req.ip,
-      user_agent: req.get('User-Agent'),
-      session_id: req.session?.session_id
+      user_agent: req.get('User-Agent')
     }).catch(console.error);
   }
 

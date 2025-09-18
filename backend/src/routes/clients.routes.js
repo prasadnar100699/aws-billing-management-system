@@ -2,10 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { getMany, getOne, insert, update, deleteRecord } = require('../config/db');
 const auditLogger = require('../utils/auditLogger');
-const { requireAuth, requirePermission } = require('../middlewares/auth.middleware');
 
 // GET /api/clients - List clients with pagination
-router.get('/', requireAuth, requirePermission('clients', 'view'), async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -63,7 +62,7 @@ router.get('/', requireAuth, requirePermission('clients', 'view'), async (req, r
 });
 
 // POST /api/clients - Create new client
-router.post('/', requireAuth, requirePermission('clients', 'create'), async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const {
       client_name,
@@ -76,7 +75,8 @@ router.post('/', requireAuth, requirePermission('clients', 'create'), async (req
       billing_address,
       invoice_preferences,
       default_currency,
-      status
+      status,
+      user_id // Optional user_id from request body
     } = req.body;
 
     if (!client_name || !email) {
@@ -106,22 +106,23 @@ router.post('/', requireAuth, requirePermission('clients', 'create'), async (req
 
     const clientId = await insert('clients', clientData);
 
-    // Log audit trail
-    try {
-      await auditLogger.log({
-        user_id: req.user.user_id,
-        action_type: 'CREATE',
-        entity_type: 'client',
-        entity_id: clientId,
-        entity_name: client_name,
-        description: `Created client: ${client_name}`,
-        new_values: clientData,
-        ip_address: req.ip,
-        user_agent: req.get('User-Agent'),
-        session_id: req.session?.session_id
-      });
-    } catch (auditError) {
-      console.warn('Audit logging failed:', auditError.message);
+    // Log audit trail if user_id is provided
+    if (user_id) {
+      try {
+        await auditLogger.log({
+          user_id,
+          action_type: 'CREATE',
+          entity_type: 'client',
+          entity_id: clientId,
+          entity_name: client_name,
+          description: `Created client: ${client_name}`,
+          new_values: clientData,
+          ip_address: req.ip,
+          user_agent: req.get('User-Agent')
+        });
+      } catch (auditError) {
+        console.warn('Audit logging failed:', auditError.message);
+      }
     }
 
     res.status(201).json({
@@ -136,7 +137,7 @@ router.post('/', requireAuth, requirePermission('clients', 'create'), async (req
 });
 
 // GET /api/clients/:id - Get single client
-router.get('/:id', requireAuth, requirePermission('clients', 'view'), async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
     
@@ -169,9 +170,10 @@ router.get('/:id', requireAuth, requirePermission('clients', 'view'), async (req
 });
 
 // PUT /api/clients/:id - Update client
-router.put('/:id', requireAuth, requirePermission('clients', 'edit'), async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
+    const { user_id } = req.body; // Optional user_id from request body
     
     const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
     if (!client) {
@@ -197,26 +199,28 @@ router.put('/:id', requireAuth, requirePermission('clients', 'edit'), async (req
     if (updateData.aws_account_ids && Array.isArray(updateData.aws_account_ids)) {
       updateData.aws_account_ids = JSON.stringify(updateData.aws_account_ids);
     }
+    delete updateData.user_id; // Remove user_id from update data
 
     await update('clients', updateData, 'client_id = ?', [clientId]);
 
-    // Log audit trail
-    try {
-      await auditLogger.log({
-        user_id: req.user.user_id,
-        action_type: 'UPDATE',
-        entity_type: 'client',
-        entity_id: clientId,
-        entity_name: client.client_name,
-        description: `Updated client: ${client.client_name}`,
-        old_values: oldValues,
-        new_values: updateData,
-        ip_address: req.ip,
-        user_agent: req.get('User-Agent'),
-        session_id: req.session?.session_id
-      });
-    } catch (auditError) {
-      console.warn('Audit logging failed:', auditError.message);
+    // Log audit trail if user_id is provided
+    if (user_id) {
+      try {
+        await auditLogger.log({
+          user_id,
+          action_type: 'UPDATE',
+          entity_type: 'client',
+          entity_id: clientId,
+          entity_name: client.client_name,
+          description: `Updated client: ${client.client_name}`,
+          old_values: oldValues,
+          new_values: updateData,
+          ip_address: req.ip,
+          user_agent: req.get('User-Agent')
+        });
+      } catch (auditError) {
+        console.warn('Audit logging failed:', auditError.message);
+      }
     }
 
     res.json({
@@ -231,9 +235,10 @@ router.put('/:id', requireAuth, requirePermission('clients', 'edit'), async (req
 });
 
 // DELETE /api/clients/:id - Delete client
-router.delete('/:id', requireAuth, requirePermission('clients', 'delete'), async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
+    const { user_id } = req.body; // Optional user_id from request body
     
     const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
     if (!client) {
@@ -252,22 +257,23 @@ router.delete('/:id', requireAuth, requirePermission('clients', 'delete'), async
 
     await deleteRecord('clients', 'client_id = ?', [clientId]);
 
-    // Log audit trail
-    try {
-      await auditLogger.log({
-        user_id: req.user.user_id,
-        action_type: 'DELETE',
-        entity_type: 'client',
-        entity_id: clientId,
-        entity_name: client.client_name,
-        description: `Deleted client: ${client.client_name}`,
-        old_values: client,
-        ip_address: req.ip,
-        user_agent: req.get('User-Agent'),
-        session_id: req.session?.session_id
-      });
-    } catch (auditError) {
-      console.warn('Audit logging failed:', auditError.message);
+    // Log audit trail if user_id is provided
+    if (user_id) {
+      try {
+        await auditLogger.log({
+          user_id,
+          action_type: 'DELETE',
+          entity_type: 'client',
+          entity_id: clientId,
+          entity_name: client.client_name,
+          description: `Deleted client: ${client.client_name}`,
+          old_values: client,
+          ip_address: req.ip,
+          user_agent: req.get('User-Agent')
+        });
+      } catch (auditError) {
+        console.warn('Audit logging failed:', auditError.message);
+      }
     }
 
     res.json({
@@ -281,7 +287,7 @@ router.delete('/:id', requireAuth, requirePermission('clients', 'delete'), async
 });
 
 // GET /api/clients/:id/aws - Get client AWS mappings
-router.get('/:id/aws', requireAuth, requirePermission('clients', 'view'), async (req, res) => {
+router.get('/:id/aws', async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
     

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,57 +22,35 @@ import {
   Users,
   FileText,
   BarChart3,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
 
+/**
+ * Login Page Component
+ * Handles user authentication with role-based access
+ */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { login, user } = useAuth();
   const router = useRouter();
 
-  // Check if user is already logged in
-  useEffect(() => {
-    checkExistingSession();
-  }, []);
+  // Redirect if already logged in
+  if (user) {
+    router.push('/dashboard');
+    return null;
+  }
 
-  // Listen for auth errors from other components
-  useEffect(() => {
-    const checkAuthError = () => {
-      const authError = localStorage.getItem('auth_error');
-      if (authError) {
-        toast.error(authError);
-        localStorage.removeItem('auth_error');
-      }
-    };
-    
-    checkAuthError();
-  }, []);
-
-  const checkExistingSession = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Store user data in localStorage for consistency
-        if (data.user) {
-          localStorage.setItem('user_data', JSON.stringify(data.user));
-          localStorage.setItem('auth_token', 'session_active');
-        }
-        router.push('/dashboard');
-      }
-    } catch (error) {
-      // User not logged in, continue with login page
-    }
-  };
-
+  /**
+   * Handle form submission and user login
+   */
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate input
     if (!email || !password) {
       toast.error('Please fill in all fields');
       return;
@@ -80,45 +59,48 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          email,
-          password
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Store user data and auth token in localStorage
-        if (data.data?.user) {
-          localStorage.setItem('user_data', JSON.stringify(data.data.user));
-          localStorage.setItem('auth_token', data.data.session_id || 'session_active');
-        }
-        
-        toast.success('Login successful!');
-        
-        // Redirect to dashboard
-        router.push('/dashboard');
-      } else {
-        toast.error(data.error || 'Login failed');
-      }
+      // Attempt login
+      await login(email, password);
+      
+      // Show success message
+      toast.success('Login successful! Redirecting to dashboard...');
+      
+      // Redirect to dashboard
+      router.push('/dashboard');
+      
     } catch (error: any) {
-      console.error('Login error:', error);
-      toast.error('Login failed. Please try again.');
+      // Show error message
+      toast.error(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  /**
+   * Fill Super Admin credentials for quick access
+   */
   const fillSuperAdminCredentials = () => {
     setEmail('admin@100699');
     setPassword('admin@100699');
+    toast.info('Super Admin credentials filled. Click Sign In to continue.');
+  };
+
+  /**
+   * Fill Client Manager credentials for quick access
+   */
+  const fillManagerCredentials = () => {
+    setEmail('manager@tejit.com');
+    setPassword('password');
+    toast.info('Client Manager credentials filled. Click Sign In to continue.');
+  };
+
+  /**
+   * Fill Auditor credentials for quick access
+   */
+  const fillAuditorCredentials = () => {
+    setEmail('auditor@tejit.com');
+    setPassword('password');
+    toast.info('Auditor credentials filled. Click Sign In to continue.');
   };
 
   const features = [
@@ -182,7 +164,7 @@ export default function LoginPage() {
                     <span className="text-blue-200">Billing Platform</span>
                   </h2>
                   <p className="text-xl text-blue-100 leading-relaxed">
-                    Complete billing and management solution for AWS service providers with advanced features.
+                    Complete billing and management solution for AWS service providers with role-based access control.
                   </p>
                 </div>
 
@@ -203,7 +185,7 @@ export default function LoginPage() {
             <div className="space-y-4">
               <div className="flex items-center space-x-4 text-blue-100">
                 <CheckCircle className="w-5 h-5" />
-                <span>Session-based authentication</span>
+                <span>Database-driven authentication</span>
               </div>
               <div className="flex items-center space-x-4 text-blue-100">
                 <Shield className="w-5 h-5" />
@@ -259,6 +241,7 @@ export default function LoginPage() {
                         placeholder="Enter your email or username"
                         className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         required
+                        disabled={isLoading}
                       />
                     </div>
                   </div>
@@ -277,11 +260,13 @@ export default function LoginPage() {
                         placeholder="Enter your password"
                         className="pl-10 pr-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         required
+                        disabled={isLoading}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        disabled={isLoading}
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -295,7 +280,7 @@ export default function LoginPage() {
                   >
                     {isLoading ? (
                       <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Signing in...</span>
                       </div>
                     ) : (
@@ -307,7 +292,7 @@ export default function LoginPage() {
                   </Button>
                 </form>
 
-                {/* Super Admin Quick Access */}
+                {/* Quick Access Cards */}
                 <div className="space-y-4">
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
@@ -318,6 +303,7 @@ export default function LoginPage() {
                     </div>
                   </div>
 
+                  {/* Super Admin Quick Access */}
                   <div
                     data-testid="super-admin-quick-access"
                     onClick={fillSuperAdminCredentials}
@@ -336,9 +322,45 @@ export default function LoginPage() {
                     <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
                   </div>
 
+                  {/* Client Manager Quick Access */}
+                  <div
+                    onClick={fillManagerCredentials}
+                    className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg hover:border-green-400 hover:bg-green-50/50 cursor-pointer transition-all duration-200 group"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+                        <Users className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">Client Manager</p>
+                        <p className="text-sm text-gray-600">Manage clients & invoices</p>
+                        <p className="text-xs text-green-600 font-mono">manager@tejit.com</p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition-colors" />
+                  </div>
+
+                  {/* Auditor Quick Access */}
+                  <div
+                    onClick={fillAuditorCredentials}
+                    className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg hover:border-gray-400 hover:bg-gray-50/50 cursor-pointer transition-all duration-200 group"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-gray-500 to-gray-600 rounded-lg flex items-center justify-center">
+                        <BarChart3 className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">Auditor</p>
+                        <p className="text-sm text-gray-600">Reports & analytics access</p>
+                        <p className="text-xs text-gray-600 font-mono">auditor@tejit.com</p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                  </div>
+
                   <div className="text-center">
                     <p className="text-xs text-gray-500">
-                      Click above to auto-fill Super Admin credentials
+                      Click above to auto-fill credentials for testing
                     </p>
                   </div>
                 </div>

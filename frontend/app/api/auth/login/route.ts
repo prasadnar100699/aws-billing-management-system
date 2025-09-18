@@ -1,20 +1,27 @@
-// frontend/app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5002';
 
+/**
+ * Login API Route - Proxy to backend authentication
+ * Handles user login and returns user data with permissions
+ */
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
 
+    // Validate input
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { 
+          success: false,
+          error: 'Email and password are required' 
+        },
         { status: 400 }
       );
     }
 
-    // Proxy the request to Express backend
+    // Forward request to Express backend
     const backendResponse = await fetch(`${BACKEND_URL}/auth/login`, {
       method: 'POST',
       headers: {
@@ -27,31 +34,31 @@ export async function POST(request: NextRequest) {
 
     const data = await backendResponse.json();
 
-    if (backendResponse.ok) {
-      // Create response with session cookie
-      const response = NextResponse.json(data, { status: 200 });
-
-      // Set session cookie if provided by backend
-      if (data.data?.session_id) {
-        response.cookies.set('session_id', data.data.session_id, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 8 * 60 * 60 // 8 hours
-        });
-      }
-
-      return response;
+    if (backendResponse.ok && data.success) {
+      // Return successful login response
+      return NextResponse.json({
+        success: true,
+        message: data.message,
+        user: data.data.user,
+        permissions: data.data.permissions
+      }, { status: 200 });
     } else {
+      // Return error response
       return NextResponse.json(
-        { error: data.error || 'Login failed' },
+        { 
+          success: false,
+          error: data.error || 'Login failed' 
+        },
         { status: backendResponse.status }
       );
     }
   } catch (error) {
     console.error('Login proxy error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error' 
+      },
       { status: 500 }
     );
   }

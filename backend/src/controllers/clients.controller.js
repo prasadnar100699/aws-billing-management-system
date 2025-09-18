@@ -1,4 +1,5 @@
 const { getMany, getOne, insert, update, deleteRecord } = require('../config/db');
+const auditLogger = require('../utils/auditLogger');
 
 class ClientsController {
   async createClient(req, res) {
@@ -14,7 +15,8 @@ class ClientsController {
         billing_address,
         invoice_preferences,
         default_currency,
-        status
+        status,
+        user_id // Optional user_id from request body
       } = req.body;
 
       if (!client_name || !email) {
@@ -43,6 +45,25 @@ class ClientsController {
       };
 
       const clientId = await insert('clients', clientData);
+
+      // Log audit trail if user_id is provided
+      if (user_id) {
+        try {
+          await auditLogger.log({
+            user_id,
+            action_type: 'CREATE',
+            entity_type: 'client',
+            entity_id: clientId,
+            entity_name: client_name,
+            description: `Created client: ${client_name}`,
+            new_values: clientData,
+            ip_address: req.ip,
+            user_agent: req.get('User-Agent')
+          });
+        } catch (auditError) {
+          console.warn('Audit logging failed:', auditError.message);
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -147,11 +168,15 @@ class ClientsController {
   async updateClient(req, res) {
     try {
       const clientId = parseInt(req.params.id);
+      const { user_id } = req.body; // Optional user_id from request body
       
       const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
       if (!client) {
         return res.status(404).json({ error: 'Client not found' });
       }
+
+      // Store old values for audit
+      const oldValues = { ...client };
 
       // Check if email is being changed and if it already exists
       if (req.body.email && req.body.email !== client.email) {
@@ -169,8 +194,29 @@ class ClientsController {
       if (updateData.aws_account_ids && Array.isArray(updateData.aws_account_ids)) {
         updateData.aws_account_ids = JSON.stringify(updateData.aws_account_ids);
       }
+      delete updateData.user_id; // Remove user_id from update data
 
       await update('clients', updateData, 'client_id = ?', [clientId]);
+
+      // Log audit trail if user_id is provided
+      if (user_id) {
+        try {
+          await auditLogger.log({
+            user_id,
+            action_type: 'UPDATE',
+            entity_type: 'client',
+            entity_id: clientId,
+            entity_name: client.client_name,
+            description: `Updated client: ${client.client_name}`,
+            old_values: oldValues,
+            new_values: updateData,
+            ip_address: req.ip,
+            user_agent: req.get('User-Agent')
+          });
+        } catch (auditError) {
+          console.warn('Audit logging failed:', auditError.message);
+        }
+      }
 
       res.json({
         success: true,
@@ -186,6 +232,7 @@ class ClientsController {
   async deleteClient(req, res) {
     try {
       const clientId = parseInt(req.params.id);
+      const { user_id } = req.body; // Optional user_id from request body
       
       const client = await getOne('SELECT * FROM clients WHERE client_id = ?', [clientId]);
       if (!client) {
@@ -203,6 +250,25 @@ class ClientsController {
       }
 
       await deleteRecord('clients', 'client_id = ?', [clientId]);
+
+      // Log audit trail if user_id is provided
+      if (user_id) {
+        try {
+          await auditLogger.log({
+            user_id,
+            action_type: 'DELETE',
+            entity_type: 'client',
+            entity_id: clientId,
+            entity_name: client.client_name,
+            description: `Deleted client: ${client.client_name}`,
+            old_values: client,
+            ip_address: req.ip,
+            user_agent: req.get('User-Agent')
+          });
+        } catch (auditError) {
+          console.warn('Audit logging failed:', auditError.message);
+        }
+      }
 
       res.json({
         success: true,
