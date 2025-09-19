@@ -8,37 +8,10 @@ const nextConfig = {
     CUSTOM_KEY: 'my-value',
   },
 
-  // Redirects
-  async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/dashboard',
-        permanent: false,
-      },
-    ];
-  },
-
-  // API configuration
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_BASE_URL}/:path*`,
-      },
-    ];
-  },
-
   // Image optimization
   images: {
-    domains: ['localhost'],
+    domains: ['localhost', '10.10.50.93'],
     formats: ['image/webp', 'image/avif'],
-  },
-
-  // Webpack configuration
-  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Custom webpack config if needed
-    return config;
   },
 
   // Headers for security

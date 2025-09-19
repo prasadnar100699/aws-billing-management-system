@@ -12,7 +12,6 @@ import {
   Eye, 
   EyeOff, 
   Building2, 
-  Shield,
   Lock,
   Mail,
   ArrowRight,
@@ -22,13 +21,12 @@ import {
   Users,
   FileText,
   BarChart3,
-  Settings,
   Loader2
 } from 'lucide-react';
 
 /**
  * Login Page Component
- * Handles user authentication with role-based access
+ * Handles user authentication with secure form validation
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -56,6 +54,18 @@ export default function LoginPage() {
       return;
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -74,33 +84,6 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  /**
-   * Fill Super Admin credentials for quick access
-   */
-  const fillSuperAdminCredentials = () => {
-    setEmail('admin@100699');
-    setPassword('admin@100699');
-    toast.info('Super Admin credentials filled. Click Sign In to continue.');
-  };
-
-  /**
-   * Fill Client Manager credentials for quick access
-   */
-  const fillManagerCredentials = () => {
-    setEmail('manager@tejit.com');
-    setPassword('password');
-    toast.info('Client Manager credentials filled. Click Sign In to continue.');
-  };
-
-  /**
-   * Fill Auditor credentials for quick access
-   */
-  const fillAuditorCredentials = () => {
-    setEmail('auditor@tejit.com');
-    setPassword('password');
-    toast.info('Auditor credentials filled. Click Sign In to continue.');
   };
 
   const features = [
@@ -185,14 +168,14 @@ export default function LoginPage() {
             <div className="space-y-4">
               <div className="flex items-center space-x-4 text-blue-100">
                 <CheckCircle className="w-5 h-5" />
-                <span>Database-driven authentication</span>
+                <span>Secure authentication system</span>
               </div>
               <div className="flex items-center space-x-4 text-blue-100">
-                <Shield className="w-5 h-5" />
+                <CheckCircle className="w-5 h-5" />
                 <span>Role-based access control</span>
               </div>
               <div className="flex items-center space-x-4 text-blue-100">
-                <Settings className="w-5 h-5" />
+                <CheckCircle className="w-5 h-5" />
                 <span>Comprehensive audit trails</span>
               </div>
             </div>
@@ -229,16 +212,16 @@ export default function LoginPage() {
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                      Email / Username
+                      Email Address
                     </Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                       <Input
                         id="email"
-                        type="text"
+                        type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Enter your email or username"
+                        placeholder="Enter your email address"
                         className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         required
                         disabled={isLoading}
@@ -292,77 +275,11 @@ export default function LoginPage() {
                   </Button>
                 </form>
 
-                {/* Quick Access Cards */}
-                <div className="space-y-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-4 bg-white text-gray-500">Quick Access</span>
-                    </div>
-                  </div>
-
-                  {/* Super Admin Quick Access */}
-                  <div
-                    data-testid="super-admin-quick-access"
-                    onClick={fillSuperAdminCredentials}
-                    className="flex items-center justify-between p-4 border-2 border-blue-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all duration-200 group"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">Super Administrator</p>
-                        <p className="text-sm text-gray-600">Full system access</p>
-                        <p className="text-xs text-blue-600 font-mono">admin@100699</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
-                  </div>
-
-                  {/* Client Manager Quick Access */}
-                  <div
-                    onClick={fillManagerCredentials}
-                    className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg hover:border-green-400 hover:bg-green-50/50 cursor-pointer transition-all duration-200 group"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
-                        <Users className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">Client Manager</p>
-                        <p className="text-sm text-gray-600">Manage clients & invoices</p>
-                        <p className="text-xs text-green-600 font-mono">manager@tejit.com</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition-colors" />
-                  </div>
-
-                  {/* Auditor Quick Access */}
-                  <div
-                    onClick={fillAuditorCredentials}
-                    className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg hover:border-gray-400 hover:bg-gray-50/50 cursor-pointer transition-all duration-200 group"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-gray-500 to-gray-600 rounded-lg flex items-center justify-center">
-                        <BarChart3 className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">Auditor</p>
-                        <p className="text-sm text-gray-600">Reports & analytics access</p>
-                        <p className="text-xs text-gray-600 font-mono">auditor@tejit.com</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
-                  </div>
-
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500">
-                      Click above to auto-fill credentials for testing
-                    </p>
-                  </div>
+                {/* Help Text */}
+                <div className="text-center">
+                  <p className="text-sm text-gray-600">
+                    Need an account? Contact your system administrator.
+                  </p>
                 </div>
               </CardContent>
             </Card>

@@ -1,4 +1,6 @@
 const { getOne, update, getMany } = require('../config/db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const auditLogger = require('../utils/auditLogger');
 
 class AuthController {
@@ -15,8 +17,8 @@ class AuthController {
 
   /**
    * Handle user login with username/email and password
-   * Checks user exists, is active, and validates plain text password
-   * Updates last_login timestamp and returns user data with permissions
+   * Checks user exists, is active, and validates hashed password
+   * Returns JWT token and user data with permissions
    */
   async login(req, res) {
     try {
@@ -26,7 +28,7 @@ class AuthController {
       if (!email || !password) {
         return res.status(400).json({ 
           success: false,
-          error: 'Email/username and password are required' 
+          error: 'Email and password are required' 
         });
       }
 
@@ -53,8 +55,22 @@ class AuthController {
         });
       }
 
-      // Validate plain text password
-      if (user.password !== password) {
+      // Validate password (check if it's hashed or plain text)
+      let isValidPassword = false;
+      
+      if (user.password.startsWith('$2')) {
+        // Password is hashed with bcrypt
+        isValidPassword = await bcrypt.compare(password, user.password);
+      } else {
+        // Plain text password (for backward compatibility)
+        isValidPassword = user.password === password;
+        
+        // Hash the password for future use
+        const hashedPassword = await bcrypt.hash(password, 12);
+        await update('users', { password: hashedPassword }, 'user_id = ?', [user.user_id]);
+      }
+
+      if (!isValidPassword) {
         // Increment login attempts
         const newAttempts = (user.login_attempts || 0) + 1;
         const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 5;
@@ -77,6 +93,18 @@ class AuthController {
 
       // Get user permissions from role_permissions table
       const permissions = await this.getUserPermissions(user.role_id);
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          user_id: user.user_id,
+          email: user.email,
+          role_id: user.role_id,
+          role_name: user.role_name
+        },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+      );
 
       // Update user login info on successful login
       await update('users', {
@@ -111,13 +139,14 @@ class AuthController {
         last_login: new Date().toISOString()
       };
 
-      // Return success response with user data and permissions
+      // Return success response with user data, permissions, and token
       res.json({
         success: true,
         message: 'Login successful',
         data: {
           user: userData,
-          permissions: permissions
+          permissions: permissions,
+          token: token
         }
       });
 
@@ -163,7 +192,7 @@ class AuthController {
 
   /**
    * Handle user logout
-   * No session management, so just log the action
+   * Log the action for audit trail
    */
   async logout(req, res) {
     try {
@@ -197,20 +226,60 @@ class AuthController {
   }
 
   /**
-   * Verify user authentication
-   * No authentication state, so return a simple response
+   * Verify JWT token and return user data
    */
   async verifyAuth(req, res) {
     try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          error: 'No token provided'
+        });
+      }
+
+      // Verify JWT token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+      
+      // Get fresh user data
+      const user = await getOne(`
+        SELECT u.*, r.role_name 
+        FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE u.user_id = ? AND u.status = 'active'
+      `, [decoded.user_id]);
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not found or inactive'
+        });
+      }
+
+      // Get permissions
+      const permissions = await this.getUserPermissions(user.role_id);
+
       res.json({
         success: true,
-        message: 'No authentication state maintained'
+        data: {
+          user: {
+            user_id: user.user_id,
+            username: user.username,
+            email: user.email,
+            role_id: user.role_id,
+            role_name: user.role_name,
+            status: user.status
+          },
+          permissions
+        }
       });
+
     } catch (error) {
       console.error('Auth verification error:', error);
-      res.status(500).json({ 
+      res.status(401).json({ 
         success: false,
-        error: 'Internal server error during auth verification' 
+        error: 'Invalid or expired token' 
       });
     }
   }

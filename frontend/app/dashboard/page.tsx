@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import axios from 'axios';
 import {
   Building2,
   FileText,
@@ -39,6 +40,7 @@ import {
 } from 'recharts';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://10.10.50.93:5002';
 
 interface DashboardData {
   metrics: {
@@ -97,19 +99,33 @@ export default function DashboardPage() {
   }, [user, authLoading, isAuthenticated, router]);
 
   /**
-   * Load dashboard data based on user role
+   * Load dashboard data from backend API
    */
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       
-      // Mock dashboard data based on role - replace with actual API calls
+      // Try to fetch from backend API
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/dashboard`);
+        if (response.data.success) {
+          setDashboardData(response.data.data);
+          return;
+        }
+      } catch (apiError) {
+        console.warn('Backend API not available, using mock data:', apiError);
+      }
+      
+      // Fallback to mock data if backend is not available
       const mockData = generateMockDashboardData(user!.role_name);
       setDashboardData(mockData);
       
     } catch (error) {
       console.error('Dashboard data error:', error);
       toast.error('Failed to load dashboard data');
+      
+      // Use minimal mock data as final fallback
+      setDashboardData({ metrics: {} });
     } finally {
       setLoading(false);
     }
@@ -618,20 +634,6 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Permission Debug Info (only in development) */}
-            {process.env.NODE_ENV === 'development' && user.role_name === 'Super Admin' && (
-              <Card className="border-dashed border-gray-300">
-                <CardHeader>
-                  <CardTitle className="text-sm text-gray-600">Debug: User Permissions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <pre className="text-xs text-gray-600 bg-gray-50 p-4 rounded overflow-auto">
-                    {JSON.stringify({ user, permissions }, null, 2)}
-                  </pre>
                 </CardContent>
               </Card>
             )}

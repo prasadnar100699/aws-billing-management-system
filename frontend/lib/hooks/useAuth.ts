@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 
 interface User {
   user_id: number;
@@ -20,9 +21,11 @@ interface Permissions {
   };
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://10.10.50.93:5002';
+
 /**
  * Authentication Hook
- * Manages user authentication state and permissions
+ * Manages user authentication state and permissions with backend integration
  */
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -63,41 +66,40 @@ export function useAuth() {
   };
 
   /**
-   * Login user with email/username and password
+   * Login user with email and password
    */
   const login = useCallback(async (email: string, password: string) => {
     try {
       setLoading(true);
       
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password })
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+        email,
+        password
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (response.data.success) {
+        const userData = response.data.data.user;
+        const userPermissions = response.data.data.permissions || {};
+        
         // Store user data and permissions
-        setUser(data.user);
-        setPermissions(data.permissions || {});
+        setUser(userData);
+        setPermissions(userPermissions);
         
         // Persist to localStorage
         if (typeof window !== 'undefined') {
-          localStorage.setItem('user_data', JSON.stringify(data.user));
-          localStorage.setItem('user_permissions', JSON.stringify(data.permissions || {}));
-          localStorage.setItem('auth_token', 'authenticated'); // Simple token flag
+          localStorage.setItem('user_data', JSON.stringify(userData));
+          localStorage.setItem('user_permissions', JSON.stringify(userPermissions));
+          localStorage.setItem('auth_token', 'authenticated');
         }
         
-        return { success: true, user: data.user };
+        return { success: true, user: userData };
       } else {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(response.data.error || 'Login failed');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      throw new Error(error.message || 'Login failed');
+      const errorMessage = error.response?.data?.error || error.message || 'Login failed';
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -109,14 +111,11 @@ export function useAuth() {
   const logout = useCallback(async () => {
     try {
       // Call backend logout (optional, for audit logging)
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ user_id: user?.user_id })
-      }).catch(() => {}); // Ignore errors
-
+      if (user) {
+        await axios.post(`${API_BASE_URL}/auth/logout`, {
+          user_id: user.user_id
+        }).catch(() => {}); // Ignore errors
+      }
     } finally {
       // Clear all auth data regardless of backend response
       clearAuthData();
