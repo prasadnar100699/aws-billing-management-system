@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 
 interface User {
   user_id: number;
@@ -21,11 +20,11 @@ interface Permissions {
   };
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://10.10.50.93:5002';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5002';
 
 /**
  * Authentication Hook
- * Manages user authentication state and permissions with backend integration
+ * Manages user authentication state and permissions with session-based auth
  */
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -34,31 +33,36 @@ export function useAuth() {
   const router = useRouter();
 
   useEffect(() => {
-    // Load user data from localStorage on component mount
-    loadStoredAuth();
+    // Check authentication status on mount
+    checkAuthStatus();
   }, []);
 
   /**
-   * Load authentication data from localStorage
+   * Check authentication status with backend
    */
-  const loadStoredAuth = () => {
+  const checkAuthStatus = async () => {
     try {
-      if (typeof window !== 'undefined') {
-        const userData = localStorage.getItem('user_data');
-        const permissionsData = localStorage.getItem('user_permissions');
-        
-        if (userData) {
-          const parsedUser = JSON.parse(userData);
-          setUser(parsedUser);
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
         }
-        
-        if (permissionsData) {
-          const parsedPermissions = JSON.parse(permissionsData);
-          setPermissions(parsedPermissions);
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUser(data.user);
+          setPermissions(data.permissions || {});
+        } else {
+          clearAuthData();
         }
+      } else {
+        clearAuthData();
       }
     } catch (error) {
-      console.error('Error loading stored auth data:', error);
+      console.error('Auth check error:', error);
       clearAuthData();
     } finally {
       setLoading(false);
@@ -72,33 +76,32 @@ export function useAuth() {
     try {
       setLoading(true);
       
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        email,
-        password
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
       });
 
-      if (response.data.success) {
-        const userData = response.data.data.user;
-        const userPermissions = response.data.data.permissions || {};
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const userData = data.user;
+        const userPermissions = data.permissions || {};
         
-        // Store user data and permissions
+        // Update state
         setUser(userData);
         setPermissions(userPermissions);
         
-        // Persist to localStorage
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('user_data', JSON.stringify(userData));
-          localStorage.setItem('user_permissions', JSON.stringify(userPermissions));
-          localStorage.setItem('auth_token', 'authenticated');
-        }
-        
         return { success: true, user: userData };
       } else {
-        throw new Error(response.data.error || 'Login failed');
+        throw new Error(data.error || 'Login failed');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Login failed';
+      const errorMessage = error.message || 'Login failed';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
@@ -110,31 +113,27 @@ export function useAuth() {
    */
   const logout = useCallback(async () => {
     try {
-      // Call backend logout (optional, for audit logging)
-      if (user) {
-        await axios.post(`${API_BASE_URL}/auth/logout`, {
-          user_id: user.user_id
-        }).catch(() => {}); // Ignore errors
-      }
+      // Call backend logout
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }).catch(() => {}); // Ignore errors
     } finally {
-      // Clear all auth data regardless of backend response
+      // Clear auth data
       clearAuthData();
       router.push('/');
     }
-  }, [user, router]);
+  }, [router]);
 
   /**
-   * Clear authentication data from state and localStorage
+   * Clear authentication data from state
    */
   const clearAuthData = () => {
     setUser(null);
     setPermissions({});
-    
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('user_data');
-      localStorage.removeItem('user_permissions');
-      localStorage.removeItem('auth_token');
-    }
   };
 
   /**
@@ -172,7 +171,7 @@ export function useAuth() {
    * Check if user is authenticated
    */
   const isAuthenticated = useCallback((): boolean => {
-    return !!user && !!localStorage.getItem('auth_token');
+    return !!user;
   }, [user]);
 
   return {

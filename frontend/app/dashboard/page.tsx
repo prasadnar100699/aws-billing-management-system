@@ -105,27 +105,32 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // Try to fetch from backend API
-      try {
-        const response = await axios.get(`${API_BASE_URL}/api/dashboard`);
-        if (response.data.success) {
-          setDashboardData(response.data.data);
-          return;
+      const response = await fetch(`${API_BASE_URL}/api/dashboard`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
         }
-      } catch (apiError) {
-        console.warn('Backend API not available, using mock data:', apiError);
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setDashboardData(data.data);
+        } else {
+          throw new Error(data.error || 'Failed to load dashboard data');
+        }
+      } else {
+        throw new Error('Failed to fetch dashboard data');
       }
-      
-      // Fallback to mock data if backend is not available
-      const mockData = generateMockDashboardData(user!.role_name);
-      setDashboardData(mockData);
       
     } catch (error) {
       console.error('Dashboard data error:', error);
       toast.error('Failed to load dashboard data');
       
-      // Use minimal mock data as final fallback
-      setDashboardData({ metrics: {} });
+      // Use fallback data
+      const fallbackData = generateMockDashboardData(user!.role_name);
+      setDashboardData(fallbackData);
     } finally {
       setLoading(false);
     }

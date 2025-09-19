@@ -6,15 +6,10 @@ const publicRoutes = ['/', '/signup'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionId = request.cookies.get('session_id')?.value;
 
   // Handle root path and login page
   if (pathname === '/') {
-    // If already logged in, redirect to dashboard
-    if (sessionId) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    // Not logged in, allow access to login page
+    // Always allow access to login page
     return NextResponse.next();
   }
 
@@ -23,15 +18,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Protected routes → require session
-  if (!sessionId) {
-    // Check if we have auth token in localStorage (for development)
-    const response = NextResponse.next();
-    response.headers.set('X-Auth-Required', 'true');
-    return response;
-  }
-
-  // ✅ Authenticated, allow access
+  // For protected routes, let the page handle authentication
   return NextResponse.next();
 }
 
